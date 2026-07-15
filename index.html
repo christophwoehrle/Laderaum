@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laderaumoptimierung Sattelzug – Tautliner</title>
+<style>
+  :root{
+    --bg:#0f172a;
+    --panel:#ffffff;
+    --panel-2:#f8fafc;
+    --line:#e2e8f0;
+    --ink:#0f172a;
+    --muted:#64748b;
+    --accent:#2563eb;
+    --accent-d:#1d4ed8;
+    --ok:#16a34a;
+    --warn:#d97706;
+    --err:#dc2626;
+    --radius:12px;
+    --shadow:0 1px 3px rgba(15,23,42,.08),0 8px 24px rgba(15,23,42,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:linear-gradient(180deg,#eef2f7 0%,#e6edf5 100%);
+    color:var(--ink);
+    line-height:1.5;
+    padding:16px;
+  }
+  .wrap{max-width:100%;margin:0 auto}
+  header.app{
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    margin-bottom:16px;
+  }
+  header.app .logo{
+    width:46px;height:46px;border-radius:10px;flex:0 0 auto;
+    background:linear-gradient(135deg,var(--accent),#0ea5e9);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;
+    box-shadow:var(--shadow);
+  }
+  header.app h1{font-size:1.35rem;margin:0;line-height:1.2}
+  header.app p{margin:2px 0 0;color:var(--muted);font-size:.85rem}
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:18px;margin-bottom:16px;
+  }
+  .panel h2{
+    font-size:1rem;margin:0 0 14px;display:flex;align-items:center;gap:8px;
+    padding-bottom:10px;border-bottom:1px solid var(--line);
+  }
+  .panel h2 .num{
+    background:var(--accent);color:#fff;width:22px;height:22px;border-radius:50%;
+    display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;flex:0 0 auto;
+  }
+  .grid-order{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+  label{display:block;font-size:.78rem;font-weight:600;color:var(--muted);margin-bottom:5px}
+  input,select{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;
+    font-size:.9rem;background:#fff;color:var(--ink);font-family:inherit;
+  }
+  input:focus,select:focus{outline:2px solid rgba(37,99,235,.35);border-color:var(--accent)}
+  .tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table.pkg{width:100%;border-collapse:collapse;min-width:760px}
+  table.pkg th,table.pkg td{padding:8px 6px;text-align:left;font-size:.85rem}
+  table.pkg th{
+    color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;
+    border-bottom:1px solid var(--line);font-weight:700;
+  }
+  table.pkg td input,table.pkg td select{padding:7px 8px}
+  table.pkg .colw{width:52px}
+  .swatch{width:16px;height:16px;border-radius:4px;display:inline-block;border:1px solid rgba(0,0,0,.15);vertical-align:middle}
+  .btn{
+    display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:600;
+    border:none;border-radius:9px;padding:10px 16px;font-size:.9rem;font-family:inherit;
+    transition:transform .05s ease,box-shadow .1s ease;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:var(--accent-d)}
+  .btn-ghost{background:var(--panel-2);color:var(--ink);border:1px solid var(--line)}
+  .btn-ghost:hover{background:#eef2f7}
+  .btn-danger{background:transparent;color:var(--err);border:1px solid transparent;padding:6px 8px}
+  .btn-danger:hover{background:#fef2f2}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+  .toolbar .spacer{flex:1 1 auto}
+  .hint{font-size:.75rem;color:var(--muted)}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:6px}
+  .stat{
+    background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+  }
+  .stat .k{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:700}
+  .stat .v{font-size:1.35rem;font-weight:700;margin-top:2px}
+  .stat .sub{font-size:.74rem;color:var(--muted)}
+  .bar{height:7px;background:#e5eaf1;border-radius:99px;overflow:hidden;margin-top:8px}
+  .bar > i{display:block;height:100%;border-radius:99px;background:var(--accent)}
+  .bar.warn > i{background:var(--warn)}
+  .bar.err > i{background:var(--err)}
+  .bar.ok > i{background:var(--ok)}
+  .msgs{margin:10px 0 0}
+  .msg{padding:9px 12px;border-radius:8px;font-size:.83rem;margin-bottom:8px;border:1px solid}
+  .msg.warn{background:#fffbeb;border-color:#fde68a;color:#92400e}
+  .msg.err{background:#fef2f2;border-color:#fecaca;color:#991b1b}
+  .msg.ok{background:#f0fdf4;border-color:#bbf7d0;color:#166534}
+  .view-title{font-size:.85rem;font-weight:700;color:var(--muted);margin:4px 0 8px;display:flex;justify-content:space-between;align-items:baseline}
+  .view-title small{font-weight:500}
+  .svg-box{width:100%;border:1px solid var(--line);border-radius:10px;background:#fbfcfe;overflow:hidden}
+  svg{display:block;width:100%;height:auto}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+  .legend .item{display:flex;align-items:center;gap:7px;font-size:.8rem;background:var(--panel-2);
+    border:1px solid var(--line);border-radius:99px;padding:4px 10px}
+  .legend .item b{font-weight:700}
+  .legend .item span.dim{color:var(--muted);font-size:.74rem}
+  .empty{color:var(--muted);text-align:center;padding:30px;font-size:.9rem}
+  details.hlp{margin-top:12px;font-size:.82rem}
+  details.hlp summary{cursor:pointer;color:var(--accent);font-weight:600}
+  details.hlp ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
+  #pdfStatus{font-size:.78rem;color:var(--muted)}
+  @media (max-width:640px){
+    body{padding:10px}
+    .panel{padding:14px}
+    header.app h1{font-size:1.1rem}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="app">
+    <div class="logo">🚛</div>
+    <div>
+      <h1>Laderaumoptimierung Sattelzug</h1>
+      <p>Tautliner-Beladung für Holzpakete (Bretter, Latten, Balken) · Lademeter- &amp; Gewichtslogik</p>
+    </div>
+  </header>
+
+  <!-- ORDER -->
+  <section class="panel">
+    <h2><span class="num">1</span>Auftragsdaten</h2>
+    <div class="grid-order">
+      <div>
+        <label for="auftrag">Auftragsnummer</label>
+        <input id="auftrag" type="text" placeholder="z. B. A-2026-0815">
+      </div>
+      <div>
+        <label for="datum">Datum</label>
+        <input id="datum" type="date">
+      </div>
+    </div>
+  </section>
+
+  <!-- PACKAGES -->
+  <section class="panel">
+    <h2><span class="num">2</span>Pakete</h2>
+    <div class="tbl-scroll">
+      <table class="pkg">
+        <thead>
+          <tr>
+            <th style="width:110px">Paketnr.</th>
+            <th>Länge (mm)</th>
+            <th>Breite (mm)</th>
+            <th>Höhe (mm)</th>
+            <th class="colw">Anzahl</th>
+            <th style="min-width:190px">Kategorie</th>
+            <th style="width:70px">Farbe</th>
+            <th style="width:44px"></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn btn-ghost" id="addRow">＋ Paket hinzufügen</button>
+      <label class="btn btn-ghost" for="pdfInput" style="margin:0">📄 Import aus PDF</label>
+      <input id="pdfInput" type="file" accept="application/pdf" style="display:none">
+      <span id="pdfStatus"></span>
+      <span class="spacer"></span>
+      <button class="btn btn-primary" id="calc">Beladung optimieren →</button>
+    </div>
+
+    <details class="hlp">
+      <summary>Regeln &amp; Rahmendaten</summary>
+      <ul>
+        <li>Innenraum: 13,60 m × 2,48 m × 2,80 m · Max. Volumen 90 m³ · Max. Gewicht 24 t</li>
+        <li>Alle Maßangaben in mm. Länge bleibt immer parallel zur Fahrtrichtung – kein Drehen, nur längs/quer verschieben.</li>
+        <li>10 mm Abstand in alle Richtungen zwischen den Paketen.</li>
+        <li>Unterlagshölzer (Höhe 72 mm, 2 Stück) unter jedem Paket – auch beim Stapeln.</li>
+        <li>Obere Lagen nur auf vollständig tragender Fläche, kein Überstand in Längsrichtung, kein Schweben.</li>
+        <li>Paket­höhe ≤ 780 mm → maximal 3 Lagen. Gewicht = Volumen × Faktor (kg/m³).</li>
+      </ul>
+    </details>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="panel" id="resultPanel">
+    <h2><span class="num">3</span>Beladung / Visualisierung</h2>
+    <div id="results">
+      <div class="empty">Noch keine Berechnung. Pakete eingeben und <b>„Beladung optimieren“</b> klicken.</div>
+    </div>
+  </section>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+/* =========================================================================
+   Konstanten (alle Längen in mm, Gewicht in kg, Volumen in m³)
+   ========================================================================= */
+const TRUCK = { L:13600, W:2480, H:2800 };
+const MAX_VOLUME = 90;        // m³
+const MAX_WEIGHT = 24000;     // kg
+const GAP        = 10;        // mm Abstand ringsum
+const UNDERLAY_H = 72;        // mm Höhe Unterlagsholz
+const UNDERLAY_LEN = 120;     // mm dargestellte Breite eines Unterlagsholzes (in Fahrtrichtung)
+const MAX_LAYERS_LOW = 3;     // max. Lagen wenn Höhe <= 780
+const LOW_H = 780;
+
+const CATEGORIES = {
+  sf: { label:'Seitenware frisch',      factor:750, ref:32 },
+  sg: { label:'Seitenware getrocknet',  factor:460, ref:52 },
+  hf: { label:'Schnittholz frisch',     factor:570, ref:42 },
+  hg: { label:'Schnittholz getrocknet', factor:460, ref:52 },
+};
+
+const PALETTE = ['#2563eb','#dc2626','#16a34a','#d97706','#7c3aed','#0891b2',
+  '#db2777','#65a30d','#ea580c','#4338ca','#0d9488','#b45309','#be123c',
+  '#4f46e5','#15803d','#a21caf','#0369a1','#9a3412'];
+
+/* =========================================================================
+   UI: Zeilen
+   ========================================================================= */
+const rowsEl = document.getElementById('rows');
+let rowSeq = 0;
+
+function catOptions(sel){
+  return Object.entries(CATEGORIES).map(([k,c])=>
+    `<option value="${k}" ${k===sel?'selected':''}>${c.label} · ${c.factor} kg/m³</option>`
+  ).join('');
+}
+
+function colorFor(index){ return PALETTE[index % PALETTE.length]; }
+
+function addRow(data={}){
+  const idx = rowSeq++;
+  const color = colorFor(idx);
+  const tr = document.createElement('tr');
+  tr.dataset.color = color;
+  tr.innerHTML = `
+    <td><input type="text"   class="f-no"    value="${data.no ?? ('P'+(idx+1))}"></td>
+    <td><input type="number" class="f-l" min="1" step="1" value="${data.l ?? ''}" placeholder="Länge"></td>
+    <td><input type="number" class="f-w" min="1" step="1" value="${data.w ?? ''}" placeholder="Breite"></td>
+    <td><input type="number" class="f-h" min="1" step="1" value="${data.h ?? ''}" placeholder="Höhe"></td>
+    <td><input type="number" class="f-n" min="1" step="1" value="${data.n ?? 1}"></td>
+    <td><select class="f-cat">${catOptions(data.cat ?? 'hg')}</select></td>
+    <td><span class="swatch" style="background:${color}"></span></td>
+    <td><button class="btn btn-danger" title="Zeile löschen">✕</button></td>`;
+  tr.querySelector('.btn-danger').addEventListener('click',()=>{ tr.remove(); recolor(); });
+  rowsEl.appendChild(tr);
+}
+
+// Farben nach Reihenfolge neu vergeben, damit sie durchgehend eindeutig bleiben
+function recolor(){
+  [...rowsEl.children].forEach((tr,i)=>{
+    const c = colorFor(i);
+    tr.dataset.color = c;
+    tr.querySelector('.swatch').style.background = c;
+  });
+}
+
+document.getElementById('addRow').addEventListener('click',()=>{ addRow(); recolor(); });
+
+// Datum: min = heute
+(function initDate(){
+  const d = new Date();
+  const iso = d.toISOString().slice(0,10);
+  const el = document.getElementById('datum');
+  el.min = iso; el.value = iso;
+})();
+
+// Startzeile(n)
+addRow({no:'P1', l:4000, w:1000, h:145, n:12, cat:'hg'});
+addRow({no:'P2', l:5000, w:1200, h:200, n:8,  cat:'sf'});
+recolor();
+
+/* =========================================================================
+   Eingaben lesen
+   ========================================================================= */
+function readPackages(){
+  const list=[]; const errors=[];
+  [...rowsEl.children].forEach((tr,i)=>{
+    const no  = tr.querySelector('.f-no').value.trim() || ('P'+(i+1));
+    const l = +tr.querySelector('.f-l').value;
+    const w = +tr.querySelector('.f-w').value;
+    const h = +tr.querySelector('.f-h').value;
+    const n = Math.floor(+tr.querySelector('.f-n').value);
+    const cat = tr.querySelector('.f-cat').value;
+    const color = tr.dataset.color;
+    if(!l||!w||!h||!n) return; // leere Zeile ignorieren
+    if(l<=0||w<=0||h<=0||n<=0){ errors.push(`Paket ${no}: ungültige Werte.`); return; }
+    list.push({no,l,w,h,n,cat,color,factor:CATEGORIES[cat].factor});
+  });
+  return {list,errors};
+}
+
+/* =========================================================================
+   Optimierung
+   Achsen: X = Länge (Fahrtrichtung), Y = Breite (quer), Z = Höhe
+   Strategie:
+     1) Lagen pro Stapel = min(Höhen-Limit, 3 wenn Höhe<=780)
+     2) Stapel gleicher Paketnummer -> identische Grundfläche = volle
+        Auflage, kein Überstand.
+     3) Grundflächen-Packung (Regal-/Shelf-Heuristik, Breite absteigend)
+        füllt den Boden optimal aus.
+     4) Emission Lage für Lage unter Beachtung von Gewicht (24 t) und
+        Volumen (90 m³); volle Auflage von unten nach oben.
+   ========================================================================= */
+function maxLayers(h){
+  const perLayer = UNDERLAY_H + h;
+  const byHeight = Math.floor(TRUCK.H / perLayer);
+  const cap = (h <= LOW_H) ? Math.min(MAX_LAYERS_LOW, byHeight) : byHeight;
+  return Math.max(0, cap);
+}
+
+function optimize(pkgs){
+  const warnings=[];
+
+  // --- Stapel bilden ------------------------------------------------------
+  const stacks=[];
+  const requested={}; const oversize=new Set();
+  for(const p of pkgs){
+    requested[p.no]=(requested[p.no]||0)+p.n;
+    // Passt das Paket überhaupt hinein?
+    if(p.l+2*GAP>TRUCK.L || p.w+2*GAP>TRUCK.W || (UNDERLAY_H+p.h)>TRUCK.H){
+      warnings.push(`Paket ${p.no} (${p.l}×${p.w}×${p.h} mm) passt nicht in den Laderaum und wird übersprungen.`);
+      oversize.add(p.no);
+      continue;
+    }
+    const cap = maxLayers(p.h);
+    let rem = p.n;
+    while(rem>0){
+      const layers = Math.min(cap, rem);
+      stacks.push({
+        no:p.no, color:p.color, factor:p.factor,
+        l:p.l, w:p.w, h:p.h,
+        footL:p.l+GAP, footW:p.w+GAP,  // Grundfläche inkl. Abstand
+        layers
+      });
+      rem -= layers;
+    }
+  }
+
+  // --- Grundflächen-Packung (Shelf, Breite absteigend) --------------------
+  // Reihe (Lane) für Reihe über die Breite füllen. Die Reihenbreite wird
+  // vom breitesten verbleibenden Stapel bestimmt; dieser wird zuerst
+  // gesetzt (breite Pakete werden verlässlich geladen). Der Rest wird
+  // kürzeste-zuerst aufgefüllt – das maximiert die Stapelanzahl je Reihe.
+  let remaining = stacks.slice();
+  const shelves=[]; let nextY=0;
+  const placed=[]; const notPlaced=[];
+
+  while(remaining.length){
+    const shelfWidth = Math.max(...remaining.map(s=>s.footW));
+    if(nextY + shelfWidth > TRUCK.W+0.01){ notPlaced.push(...remaining); break; }
+
+    // breitesten Stapel zuerst setzen
+    const wideIdx = remaining.findIndex(s=>s.footW>=shelfWidth-0.01);
+    const wide = remaining[wideIdx];
+    remaining.splice(wideIdx,1);
+    const chosen=[wide];
+    let used = wide.footL;
+
+    // Rest kürzeste-zuerst auffüllen (maximale Anzahl je Reihe)
+    remaining.sort((a,b)=> a.footL-b.footL);
+    for(let i=0;i<remaining.length;){
+      if(used + remaining[i].footL <= TRUCK.L+0.01){
+        used += remaining[i].footL;
+        chosen.push(remaining[i]);
+        remaining.splice(i,1);
+      } else i++;
+    }
+
+    // entlang X platzieren
+    let x=0;
+    for(const s of chosen){ s.x=x; s.y=nextY; x+=s.footL; placed.push(s); }
+    shelves.push({y:nextY, width:shelfWidth, cursorX:used});
+    nextY += shelfWidth;
+  }
+
+  // --- Emission mit Gewicht/Volumen-Budget --------------------------------
+  const boxes=[]; const underlays=[];
+  let totW=0, totV=0; const loaded={};
+  let budgetHit=null;
+
+  // Reihenfolge: hinten/links zuerst (stabile, nachvollziehbare Beladung)
+  placed.sort((a,b)=> a.x-b.x || a.y-b.y);
+
+  for(const s of placed){
+    let usedLayers=0;
+    for(let i=0;i<s.layers;i++){
+      const vol = s.l*s.w*s.h/1e9;      // m³
+      const wt  = vol*s.factor;         // kg
+      if(totW+wt > MAX_WEIGHT+1e-6){ budgetHit=budgetHit||'weight'; break; }
+      if(totV+vol > MAX_VOLUME+1e-6){ budgetHit=budgetHit||'volume'; break; }
+      totW+=wt; totV+=vol;
+      const layerBase = i*(UNDERLAY_H+s.h);      // Unterkante Unterlagsholz
+      const zPkg = layerBase + UNDERLAY_H;       // Unterkante Paket
+      boxes.push({no:s.no,color:s.color,x:s.x,y:s.y,z:zPkg,l:s.l,w:s.w,h:s.h,layer:i});
+      // 2 Unterlagshölzer (in Fahrtrichtung an den Enden)
+      underlays.push({x:s.x,                  z:layerBase, len:UNDERLAY_LEN});
+      underlays.push({x:s.x+s.l-UNDERLAY_LEN, z:layerBase, len:UNDERLAY_LEN});
+      loaded[s.no]=(loaded[s.no]||0)+1;
+      usedLayers++;
+    }
+    s.usedLayers=usedLayers;
+    if(usedLayers===0){ s.empty=true; }
+  }
+
+  // --- Kennzahlen ---------------------------------------------------------
+  let usedLen=0, floorArea=0, maxLayerUsed=0;
+  for(const sh of shelves) usedLen=Math.max(usedLen, sh.cursorX);
+  for(const s of placed){
+    if(s.usedLayers>0){ floorArea += s.l*s.w; maxLayerUsed=Math.max(maxLayerUsed,s.usedLayers); }
+  }
+  const ldm = floorArea / TRUCK.W / 1000;  // Lademeter = genutzte Fläche(mm²)/Breite(mm) → m
+
+  // fehlende Pakete
+  let totReq=0, totLoad=0;
+  for(const k in requested) totReq+=requested[k];
+  for(const k in loaded) totLoad+=loaded[k];
+
+  if(budgetHit==='weight') warnings.push(`Maximales Gewicht von 24 t erreicht – nicht alle Pakete konnten geladen werden.`);
+  if(budgetHit==='volume') warnings.push(`Maximales Volumen von 90 m³ erreicht – nicht alle Pakete konnten geladen werden.`);
+  if(notPlaced.length)     warnings.push(`${notPlaced.reduce((a,s)=>a+s.layers,0)} Paket(e) passen nicht mehr auf die Ladefläche.`);
+
+  return {
+    boxes, underlays, placed, shelves,
+    stats:{ totW, totV, ldm, usedLen, maxLayerUsed, floorArea,
+            totReq, totLoad, requested, loaded, oversize:[...oversize] },
+    warnings
+  };
+}
+
+/* =========================================================================
+   Visualisierung (SVG)
+   ========================================================================= */
+function fmt(n,d=0){ return n.toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// Seitenansicht: X (Länge) × Z (Höhe), MIT Rädern
+function renderSide(res){
+  const M=120;                         // Rand
+  const vbW=TRUCK.L+2*M;
+  const floorY=M+TRUCK.H;              // Bodenlinie (SVG-y)
+  const wheelR=210;
+  const vbH=floorY+wheelR*2+M;
+  const X=x=>M+x;
+  const Zt=(z,h)=>floorY-z-h;          // obere Kante eines Objekts der Höhe h auf Höhe z
+
+  let s=`<svg viewBox="0 0 ${vbW} ${vbH}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Seitenansicht">`;
+  // Boden / Fahrbahn
+  s+=`<line x1="0" y1="${floorY}" x2="${vbW}" y2="${floorY}" stroke="#94a3b8" stroke-width="3"/>`;
+  // Laderaum-Rahmen (Plane)
+  s+=`<rect x="${X(0)}" y="${M}" width="${TRUCK.L}" height="${TRUCK.H}" fill="#ffffff" stroke="#334155" stroke-width="6"/>`;
+  // Höhen-Raster (jede 0,5 m gestrichelt)
+  for(let z=500;z<TRUCK.H;z+=500){
+    s+=`<line x1="${X(0)}" y1="${floorY-z}" x2="${X(TRUCK.L)}" y2="${floorY-z}" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="14 14"/>`;
+  }
+  // Räder (Zugmaschine + 3 Trailer-Achsen)
+  const wheels=[900, TRUCK.L-3200, TRUCK.L-2100, TRUCK.L-1000];
+  for(const wx of wheels){
+    s+=`<circle cx="${X(wx)}" cy="${floorY+wheelR}" r="${wheelR}" fill="#1e293b"/>`;
+    s+=`<circle cx="${X(wx)}" cy="${floorY+wheelR}" r="${wheelR*0.45}" fill="#64748b"/>`;
+  }
+  // Unterlagshölzer
+  for(const u of res.underlays){
+    s+=`<rect x="${X(u.x)}" y="${Zt(u.z,UNDERLAY_H)}" width="${u.len}" height="${UNDERLAY_H}" fill="#78350f" stroke="#451a03" stroke-width="2"/>`;
+  }
+  // Pakete (hintere Reihen zuerst zeichnen -> größeres y hinten)
+  const boxes=[...res.boxes].sort((a,b)=> b.y-a.y);
+  for(const b of boxes){
+    s+=`<rect x="${X(b.x)}" y="${Zt(b.z,b.h)}" width="${b.l}" height="${b.h}" rx="6"
+         fill="${b.color}" fill-opacity="0.85" stroke="#0f172a" stroke-width="2.5"/>`;
+    if(b.l>700 && b.h>90){
+      s+=`<text x="${X(b.x+b.l/2)}" y="${Zt(b.z,b.h)+b.h/2+18}" text-anchor="middle"
+           font-size="52" font-weight="700" fill="#fff" paint-order="stroke"
+           stroke="#0f172a" stroke-width="4">${esc(b.no)}</text>`;
+    }
+  }
+  // Maßangaben
+  s+=`<text x="${X(TRUCK.L/2)}" y="${M-30}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600">← 13,60 m →</text>`;
+  s+=`<text x="${X(0)-42}" y="${M+TRUCK.H/2}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600" transform="rotate(-90 ${X(0)-42} ${M+TRUCK.H/2})">2,80 m</text>`;
+  s+=`</svg>`;
+  return s;
+}
+
+// Draufsicht: X (Länge) × Y (Breite), OHNE Räder
+function renderTop(res){
+  const M=120;
+  const vbW=TRUCK.L+2*M;
+  const vbH=TRUCK.W+2*M;
+  const X=x=>M+x, Y=y=>M+y;
+
+  let s=`<svg viewBox="0 0 ${vbW} ${vbH}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Draufsicht">`;
+  // Ladefläche
+  s+=`<rect x="${X(0)}" y="${Y(0)}" width="${TRUCK.L}" height="${TRUCK.W}" fill="#ffffff" stroke="#334155" stroke-width="6"/>`;
+  // Fahrtrichtung
+  s+=`<line x1="${X(0)}" y1="${Y(TRUCK.W/2)}" x2="${X(TRUCK.L)}" y2="${Y(TRUCK.W/2)}" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="20 20"/>`;
+  s+=`<text x="${X(TRUCK.L)-20}" y="${Y(TRUCK.W/2)-16}" text-anchor="end" font-size="40" fill="#94a3b8">Fahrtrichtung →</text>`;
+
+  // Nur unterste Lage in Draufsicht (Grundflächen); gestapelte Lagen liegen darüber
+  const base=res.boxes.filter(b=>b.layer===0);
+  for(const b of base){
+    // Anzahl Lagen dieses Stapels ermitteln
+    const layersHere=res.boxes.filter(x=>x.x===b.x&&x.y===b.y).length;
+    s+=`<rect x="${X(b.x)}" y="${Y(b.y)}" width="${b.l}" height="${b.w}" rx="6"
+         fill="${b.color}" fill-opacity="0.88" stroke="#0f172a" stroke-width="2.5"/>`;
+    // Unterlagshölzer (2 Querhölzer) angedeutet
+    s+=`<rect x="${X(b.x)}" y="${Y(b.y)}" width="${UNDERLAY_LEN}" height="${b.w}" fill="#451a03" fill-opacity="0.25"/>`;
+    s+=`<rect x="${X(b.x+b.l-UNDERLAY_LEN)}" y="${Y(b.y)}" width="${UNDERLAY_LEN}" height="${b.w}" fill="#451a03" fill-opacity="0.25"/>`;
+    if(b.l>600 && b.w>250){
+      s+=`<text x="${X(b.x+b.l/2)}" y="${Y(b.y+b.w/2)+16}" text-anchor="middle"
+           font-size="52" font-weight="700" fill="#fff" paint-order="stroke"
+           stroke="#0f172a" stroke-width="4">${esc(b.no)}${layersHere>1?` ×${layersHere}`:''}</text>`;
+    }
+  }
+  s+=`<text x="${X(TRUCK.L/2)}" y="${M-30}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600">← 13,60 m →</text>`;
+  s+=`<text x="${X(0)-42}" y="${Y(TRUCK.W/2)}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600" transform="rotate(-90 ${X(0)-42} ${Y(TRUCK.W/2)})">2,48 m</text>`;
+  s+=`</svg>`;
+  return s;
+}
+
+/* =========================================================================
+   Ergebnis rendern
+   ========================================================================= */
+function bar(pct,cls){ return `<div class="bar ${cls}"><i style="width:${Math.min(100,pct)}%"></i></div>`; }
+
+function render(res){
+  const st=res.stats;
+  const wPct=st.totW/MAX_WEIGHT*100;
+  const vPct=st.totV/MAX_VOLUME*100;
+  const loadPct=st.totReq? st.totLoad/st.totReq*100:0;
+
+  let html='';
+
+  // Meldungen
+  if(res.warnings.length){
+    html+='<div class="msgs">';
+    for(const w of res.warnings) html+=`<div class="msg warn">⚠️ ${esc(w)}</div>`;
+    html+='</div>';
+  }
+  if(st.totLoad===st.totReq && st.totReq>0 && !res.warnings.length){
+    html+=`<div class="msgs"><div class="msg ok">✓ Alle ${st.totReq} Pakete passen in den Sattelzug.</div></div>`;
+  }
+
+  // Kennzahlen
+  html+='<div class="stats">';
+  html+=`<div class="stat"><div class="k">Geladene Pakete</div><div class="v">${st.totLoad} / ${st.totReq}</div>${bar(loadPct, loadPct>=100?'ok':'warn')}</div>`;
+  html+=`<div class="stat"><div class="k">Gewicht</div><div class="v">${fmt(st.totW)} kg</div><div class="sub">von 24.000 kg</div>${bar(wPct, wPct>99.5?'err':wPct>85?'warn':'ok')}</div>`;
+  html+=`<div class="stat"><div class="k">Volumen</div><div class="v">${fmt(st.totV,1)} m³</div><div class="sub">von 90 m³</div>${bar(vPct, vPct>99.5?'err':vPct>85?'warn':'ok')}</div>`;
+  html+=`<div class="stat"><div class="k">Lademeter</div><div class="v">${fmt(st.ldm,2)} ldm</div><div class="sub">Länge genutzt: ${fmt(st.usedLen/1000,2)} m</div></div>`;
+  html+=`<div class="stat"><div class="k">Lagen (max.)</div><div class="v">${st.maxLayerUsed}</div><div class="sub">Ladefläche: ${fmt(st.floorArea/1e6,2)} m²</div></div>`;
+  html+='</div>';
+
+  // Ansichten
+  if(res.boxes.length){
+    html+=`<div class="view-title"><span>Seitenansicht <small>(Länge × Höhe, mit Rädern)</small></span></div>`;
+    html+=`<div class="svg-box">${renderSide(res)}</div>`;
+    html+=`<div class="view-title" style="margin-top:16px"><span>Draufsicht <small>(Länge × Breite, ohne Räder – unterste Lage, ×N = Anzahl Lagen)</small></span></div>`;
+    html+=`<div class="svg-box">${renderTop(res)}</div>`;
+
+    // Legende
+    html+='<div class="legend">';
+    const seen={};
+    for(const b of res.boxes){
+      if(seen[b.no]) continue; seen[b.no]=b;
+    }
+    for(const no in seen){
+      const b=seen[no];
+      const load=st.loaded[no]||0, req=st.requested[no]||0;
+      html+=`<div class="item"><span class="swatch" style="background:${b.color}"></span>
+        <b>${esc(no)}</b> <span class="dim">${b.l}×${b.w}×${b.h} mm · ${load}/${req} Stk</span></div>`;
+    }
+    html+='</div>';
+  } else {
+    html+=`<div class="empty">Keine Pakete konnten geladen werden. Bitte Maße prüfen.</div>`;
+  }
+
+  document.getElementById('results').innerHTML=html;
+}
+
+/* =========================================================================
+   Berechnen-Button
+   ========================================================================= */
+document.getElementById('calc').addEventListener('click',()=>{
+  const {list,errors}=readPackages();
+  if(!list.length){
+    document.getElementById('results').innerHTML=
+      `<div class="msgs"><div class="msg err">Bitte mindestens ein vollständiges Paket eingeben.</div></div>`;
+    return;
+  }
+  const res=optimize(list);
+  if(errors.length) res.warnings.unshift(...errors);
+  render(res);
+  document.getElementById('resultPanel').scrollIntoView({behavior:'smooth',block:'start'});
+});
+
+/* =========================================================================
+   PDF-Import (best effort)
+   Erkennt Zeilen mit L × B × H und optionaler Stückzahl.
+   ========================================================================= */
+if(window.pdfjsLib){
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+document.getElementById('pdfInput').addEventListener('change', async (e)=>{
+  const file=e.target.files[0];
+  if(!file) return;
+  const status=document.getElementById('pdfStatus');
+  if(!window.pdfjsLib){ status.textContent='PDF-Bibliothek nicht geladen (Internetverbindung?).'; return; }
+  status.textContent='PDF wird gelesen …';
+  try{
+    const buf=await file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+    let lines=[];
+    for(let p=1;p<=pdf.numPages;p++){
+      const page=await pdf.getPage(p);
+      const tc=await page.getTextContent();
+      // Items nach Y-Position zu Zeilen gruppieren
+      const byLine={};
+      for(const it of tc.items){
+        const y=Math.round(it.transform[5]);
+        (byLine[y]=byLine[y]||[]).push(it.str);
+      }
+      Object.keys(byLine).sort((a,b)=>b-a).forEach(y=>lines.push(byLine[y].join(' ')));
+    }
+    const full=lines.join('\n');
+
+    // Auftragsnummer / Datum
+    const mA=full.match(/Auftrag[s\-\.]*(?:nummer|nr\.?)?\s*[:#]?\s*([A-Za-z0-9\-\/]+)/i);
+    if(mA) document.getElementById('auftrag').value=mA[1];
+    const mD=full.match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})/);
+    if(mD){
+      let [_,d,mo,yr]=mD; if(yr.length===2) yr='20'+yr;
+      const iso=`${yr.padStart(4,'0')}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
+      if(!isNaN(Date.parse(iso))) document.getElementById('datum').value=iso;
+    }
+
+    // Dimensionen  L x B x H  (Trenner x, ×, *)
+    const dimRe=/(\d{2,5})\s*[x×\*]\s*(\d{2,5})\s*[x×\*]\s*(\d{2,5})/g;
+    const found=[];
+    for(const line of lines){
+      let m;
+      const local=new RegExp(dimRe.source,'g');
+      while((m=local.exec(line))){
+        // Stückzahl in derselben Zeile suchen (Stk / Stück / x N)
+        let n=1;
+        const rest=line.replace(m[0],' ');
+        const mN=rest.match(/(\d{1,4})\s*(?:stk|stück|st\.|pakete?|pcs?)\b/i)
+              || rest.match(/\b(?:anz\.?|menge)\s*[:]?\s*(\d{1,4})/i);
+        if(mN) n=+mN[1];
+        found.push({l:+m[1],w:+m[2],h:+m[3],n});
+      }
+    }
+
+    if(found.length){
+      // vorhandene leere Standardzeilen entfernen
+      rowsEl.innerHTML=''; rowSeq=0;
+      found.forEach((f,i)=> addRow({no:'P'+(i+1),l:f.l,w:f.w,h:f.h,n:f.n,cat:'hg'}));
+      recolor();
+      status.textContent=`${found.length} Position(en) aus PDF übernommen – bitte Kategorie & Maße prüfen.`;
+    }else{
+      status.textContent='Keine Maßangaben (L×B×H) im PDF erkannt – bitte manuell erfassen.';
+    }
+  }catch(err){
+    console.error(err);
+    status.textContent='PDF konnte nicht gelesen werden: '+err.message;
+  }finally{
+    e.target.value='';
+  }
+});
+</script>
+</body>
+</html>
