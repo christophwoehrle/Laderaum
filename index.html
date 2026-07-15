@@ -355,6 +355,97 @@ function maxLayers(h){
   return Math.max(0, cap);
 }
 
+/* -------------------------------------------------------------------------
+   Grundflächen-Packung (Achsen: X = Länge, Y = Breite)
+   packFloor() rechnet mehrere Strategien und liefert die Variante mit den
+   meisten geladenen Paketen ("maximale Beladung"). Ein "Plan" besteht aus
+   placements [{s,x,y}], notPlaced [s] und shelves [{y,width,cursorX}].
+   ------------------------------------------------------------------------- */
+
+// Strategie A: gemischte Reihen. Je Reihe den breitesten Stapel setzen
+// (Reihenbreite), Rest kürzeste-zuerst auffüllen (max. Anzahl je Reihe).
+// Stark, wenn schmale Pakete den Restplatz breiter Reihen mitnutzen.
+function planMixedLanes(stacks){
+  const rem = stacks.slice();
+  const placements=[]; const shelves=[]; let nextY=0;
+  while(rem.length){
+    const laneW = Math.max(...rem.map(s=>s.footW));
+    if(nextY + laneW > TRUCK.W + 0.01) break;
+    const wi = rem.findIndex(s=>s.footW >= laneW-0.01);
+    const chosen=[rem[wi]]; let used=rem[wi].footL; rem.splice(wi,1);
+    rem.sort((a,b)=> a.footL-b.footL);
+    for(let i=0;i<rem.length;){
+      if(used + rem[i].footL <= TRUCK.L + 0.01){ used+=rem[i].footL; chosen.push(rem[i]); rem.splice(i,1); }
+      else i++;
+    }
+    let x=0;
+    for(const s of chosen){ placements.push({s,x,y:nextY}); x+=s.footL; }
+    shelves.push({y:nextY, width:laneW, cursorX:used});
+    nextY += laneW;
+  }
+  return {placements, notPlaced:rem, shelves};
+}
+
+// Strategie B: nach Breite gruppierte Reihen. Gleich breite Stapel bilden
+// eigene, exakt passende Reihen (kein Breitenverlust). Anschließend wählt
+// ein Knapsack die Reihen so, dass in die Breite 2,48 m die meisten Pakete
+// passen. Stark, wenn sich Breiten sauber über die Breite aufteilen lassen.
+function planWidthGroups(stacks){
+  const groups=new Map();
+  for(const s of stacks){ if(!groups.has(s.footW)) groups.set(s.footW,[]); groups.get(s.footW).push(s); }
+  // Kandidaten-Reihen je Breitenklasse (kürzeste-zuerst = max. Anzahl/Reihe)
+  const lanes=[];
+  for(const [w, arr] of groups){
+    const items = arr.slice().sort((a,b)=> a.footL-b.footL);
+    while(items.length){
+      const lane={w, items:[], len:0, pkgs:0};
+      for(let i=0;i<items.length;){
+        if(lane.len + items[i].footL <= TRUCK.L + 0.01){
+          lane.len+=items[i].footL; lane.pkgs+=items[i].layers; lane.items.push(items[i]); items.splice(i,1);
+        } else i++;
+      }
+      lanes.push(lane);
+    }
+  }
+  // Knapsack über die Breite (Skalierung /10): max. Pakete
+  const cap=Math.floor(TRUCK.W/10);
+  const wt=lanes.map(l=>Math.ceil(l.w/10));
+  const n=lanes.length;
+  const dp=new Array(cap+1).fill(0);
+  const keep=Array.from({length:n},()=>new Uint8Array(cap+1));
+  for(let i=0;i<n;i++){
+    for(let c=cap;c>=wt[i];c--){
+      const cand=dp[c-wt[i]]+lanes[i].pkgs;
+      if(cand>dp[c]){ dp[c]=cand; keep[i][c]=1; }
+    }
+  }
+  let c=cap; const chosen=[];
+  for(let i=n-1;i>=0;i--){ if(keep[i][c]){ chosen.push(lanes[i]); c-=wt[i]; } }
+  chosen.sort((a,b)=> b.w-a.w);
+  const placements=[]; const shelves=[]; let nextY=0;
+  for(const lane of chosen){
+    let x=0;
+    for(const s of lane.items){ placements.push({s,x,y:nextY}); x+=s.footL; }
+    shelves.push({y:nextY, width:lane.w, cursorX:lane.len});
+    nextY += lane.w;
+  }
+  const placedSet=new Set(placements.map(p=>p.s));
+  const notPlaced=stacks.filter(s=>!placedSet.has(s));
+  return {placements, notPlaced, shelves};
+}
+
+function packFloor(stacks){
+  const score = p => p.placements.reduce((a,q)=> a + q.s.layers, 0);   // geladene Pakete
+  const area  = p => p.placements.reduce((a,q)=> a + q.s.l*q.s.w, 0);
+  const cands = [planMixedLanes(stacks), planWidthGroups(stacks)];
+  let best=null;
+  for(const p of cands){
+    p._score=score(p); p._area=area(p);
+    if(!best || p._score>best._score || (p._score===best._score && p._area>best._area)) best=p;
+  }
+  return best;
+}
+
 function optimize(pkgs, opts={}){
   const weightLimit = opts.weightLimit !== false;   // Gewichtslimit aktiv?
   const warnings=[];
@@ -394,42 +485,14 @@ function optimize(pkgs, opts={}){
     }
   }
 
-  // --- Grundflächen-Packung (Shelf, Breite absteigend) --------------------
-  // Reihe (Lane) für Reihe über die Breite füllen. Die Reihenbreite wird
-  // vom breitesten verbleibenden Stapel bestimmt; dieser wird zuerst
-  // gesetzt (breite Pakete werden verlässlich geladen). Der Rest wird
-  // kürzeste-zuerst aufgefüllt – das maximiert die Stapelanzahl je Reihe.
-  let remaining = stacks.slice();
-  const shelves=[]; let nextY=0;
-  const placed=[]; const notPlaced=[];
-
-  while(remaining.length){
-    const shelfWidth = Math.max(...remaining.map(s=>s.footW));
-    if(nextY + shelfWidth > TRUCK.W+0.01){ notPlaced.push(...remaining); break; }
-
-    // breitesten Stapel zuerst setzen
-    const wideIdx = remaining.findIndex(s=>s.footW>=shelfWidth-0.01);
-    const wide = remaining[wideIdx];
-    remaining.splice(wideIdx,1);
-    const chosen=[wide];
-    let used = wide.footL;
-
-    // Rest kürzeste-zuerst auffüllen (maximale Anzahl je Reihe)
-    remaining.sort((a,b)=> a.footL-b.footL);
-    for(let i=0;i<remaining.length;){
-      if(used + remaining[i].footL <= TRUCK.L+0.01){
-        used += remaining[i].footL;
-        chosen.push(remaining[i]);
-        remaining.splice(i,1);
-      } else i++;
-    }
-
-    // entlang X platzieren
-    let x=0;
-    for(const s of chosen){ s.x=x; s.y=nextY; x+=s.footL; placed.push(s); }
-    shelves.push({y:nextY, width:shelfWidth, cursorX:used});
-    nextY += shelfWidth;
-  }
+  // --- Grundflächen-Packung: beste Misch-Strategie wählen -----------------
+  // Es werden mehrere Packstrategien gerechnet und diejenige mit den
+  // meisten geladenen Paketen übernommen (siehe packFloor).
+  const plan = packFloor(stacks);
+  const shelves = plan.shelves;
+  const placed = [];
+  const notPlaced = plan.notPlaced;
+  for(const p of plan.placements){ p.s.x=p.x; p.s.y=p.y; placed.push(p.s); }
 
   // --- Emission mit Gewicht/Volumen-Budget --------------------------------
   const boxes=[]; const underlays=[];

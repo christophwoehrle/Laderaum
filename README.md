@@ -70,8 +70,11 @@ Gewicht = Volumen × Faktor (kg/m³)
 1. Pro Paket wird die maximale Lagenzahl bestimmt
    (Höhenbegrenzung bzw. max. 3 bei Höhe ≤ 780 mm).
 2. Stapel gleicher Paketnummer garantieren volle Auflage ohne Überstand.
-3. Grundflächen-Packung reihenweise über die Breite: je Reihe wird der
-   breiteste Stapel gesetzt und der Rest kürzeste-zuerst aufgefüllt
-   (maximale Stapelanzahl je Reihe).
+3. Grundflächen-Packung: es werden mehrere Misch-Strategien gerechnet und
+   die Variante mit den **meisten geladenen Paketen** übernommen –
+   (a) gemischte Reihen (breitester Stapel gibt die Reihenbreite vor, Rest
+   kürzeste-zuerst) und (b) nach Breite gruppierte Reihen mit
+   Knapsack-Auswahl über die Ladebreite (kein Breitenverlust). So wird die
+   Paket-Mischung je nach Maßen automatisch für maximale Beladung gewählt.
 4. Emission Lage für Lage von unten nach oben unter Beachtung von
    Gewicht (24 t) und Volumen (90 m³).
