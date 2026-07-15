@@ -117,6 +117,11 @@
   details.hlp summary{cursor:pointer;color:var(--accent);font-weight:600}
   details.hlp ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
   #pdfStatus{font-size:.78rem;color:var(--muted)}
+  .opt{display:inline-flex;align-items:center;gap:8px;font-size:.85rem;font-weight:600;
+    color:var(--ink);cursor:pointer;user-select:none;padding:8px 12px;border:1px solid var(--line);
+    border-radius:9px;background:var(--panel-2)}
+  .opt input{width:16px;height:16px;margin:0;accent-color:var(--accent);cursor:pointer;flex:0 0 auto}
+  .stat.muted .v{color:var(--muted)}
   @media (max-width:640px){
     body{padding:10px}
     .panel{padding:14px}
@@ -175,6 +180,9 @@
       <button class="btn btn-ghost" id="addRow">＋ Paket hinzufügen</button>
       <label class="btn btn-ghost" for="pdfInput" style="margin:0">📄 Import aus PDF</label>
       <input id="pdfInput" type="file" accept="application/pdf" style="display:none">
+      <label class="opt" title="Bei deaktiviertem Limit wird das Gewicht berechnet und angezeigt, aber nicht als Beladegrenze angewendet.">
+        <input type="checkbox" id="weightLimit" checked> Maximalgewicht (24 t) berücksichtigen
+      </label>
       <span id="pdfStatus"></span>
       <span class="spacer"></span>
       <button class="btn btn-primary" id="calc">Beladung optimieren →</button>
@@ -189,6 +197,7 @@
         <li>Unterlagshölzer (Höhe 72 mm, 2 Stück) unter jedem Paket – auch beim Stapeln.</li>
         <li>Obere Lagen nur auf vollständig tragender Fläche, kein Überstand in Längsrichtung, kein Schweben.</li>
         <li>Paket­höhe ≤ 780 mm → maximal 3 Lagen. Gewicht = Volumen × Faktor (kg/m³).</li>
+        <li>Das Maximalgewicht (24 t) lässt sich über den Schalter deaktivieren – dann wird das Gewicht nur berechnet und angezeigt, aber nicht als Beladegrenze angewendet.</li>
       </ul>
     </details>
   </section>
@@ -323,7 +332,8 @@ function maxLayers(h){
   return Math.max(0, cap);
 }
 
-function optimize(pkgs){
+function optimize(pkgs, opts={}){
+  const weightLimit = opts.weightLimit !== false;   // Gewichtslimit aktiv?
   const warnings=[];
 
   // --- Stapel bilden ------------------------------------------------------
@@ -401,7 +411,7 @@ function optimize(pkgs){
     for(let i=0;i<s.layers;i++){
       const vol = s.l*s.w*s.h/1e9;      // m³
       const wt  = vol*s.factor;         // kg
-      if(totW+wt > MAX_WEIGHT+1e-6){ budgetHit=budgetHit||'weight'; break; }
+      if(weightLimit && totW+wt > MAX_WEIGHT+1e-6){ budgetHit=budgetHit||'weight'; break; }
       if(totV+vol > MAX_VOLUME+1e-6){ budgetHit=budgetHit||'volume'; break; }
       totW+=wt; totV+=vol;
       const layerBase = i*(UNDERLAY_H+s.h);      // Unterkante Unterlagsholz
@@ -433,11 +443,13 @@ function optimize(pkgs){
   if(budgetHit==='weight') warnings.push(`Maximales Gewicht von 24 t erreicht – nicht alle Pakete konnten geladen werden.`);
   if(budgetHit==='volume') warnings.push(`Maximales Volumen von 90 m³ erreicht – nicht alle Pakete konnten geladen werden.`);
   if(notPlaced.length)     warnings.push(`${notPlaced.reduce((a,s)=>a+s.layers,0)} Paket(e) passen nicht mehr auf die Ladefläche.`);
+  if(!weightLimit && totW > MAX_WEIGHT+1e-6)
+    warnings.push(`Gewichtslimit deaktiviert: Beladung wiegt ${fmt(totW)} kg und überschreitet die 24 t – bitte gesondert prüfen (z. B. Achslasten).`);
 
   return {
     boxes, underlays, placed, shelves,
     stats:{ totW, totV, ldm, usedLen, maxLayerUsed, floorArea,
-            totReq, totLoad, requested, loaded, oversize:[...oversize] },
+            totReq, totLoad, requested, loaded, oversize:[...oversize], weightLimit },
     warnings
   };
 }
@@ -558,7 +570,12 @@ function render(res){
   // Kennzahlen
   html+='<div class="stats">';
   html+=`<div class="stat"><div class="k">Geladene Pakete</div><div class="v">${st.totLoad} / ${st.totReq}</div>${bar(loadPct, loadPct>=100?'ok':'warn')}</div>`;
-  html+=`<div class="stat"><div class="k">Gewicht</div><div class="v">${fmt(st.totW)} kg</div><div class="sub">von 24.000 kg</div>${bar(wPct, wPct>99.5?'err':wPct>85?'warn':'ok')}</div>`;
+  if(st.weightLimit){
+    html+=`<div class="stat"><div class="k">Gewicht</div><div class="v">${fmt(st.totW)} kg</div><div class="sub">von 24.000 kg</div>${bar(wPct, wPct>99.5?'err':wPct>85?'warn':'ok')}</div>`;
+  } else {
+    const over = st.totW>MAX_WEIGHT;
+    html+=`<div class="stat${over?'':' muted'}"><div class="k">Gewicht</div><div class="v">${fmt(st.totW)} kg</div><div class="sub">Limit deaktiviert${over?' · &gt; 24 t!':''}</div>${bar(wPct, over?'err':'warn')}</div>`;
+  }
   html+=`<div class="stat"><div class="k">Volumen</div><div class="v">${fmt(st.totV,1)} m³</div><div class="sub">von 90 m³</div>${bar(vPct, vPct>99.5?'err':vPct>85?'warn':'ok')}</div>`;
   html+=`<div class="stat"><div class="k">Lademeter</div><div class="v">${fmt(st.ldm,2)} ldm</div><div class="sub">Länge genutzt: ${fmt(st.usedLen/1000,2)} m</div></div>`;
   html+=`<div class="stat"><div class="k">Lagen (max.)</div><div class="v">${st.maxLayerUsed}</div><div class="sub">Ladefläche: ${fmt(st.floorArea/1e6,2)} m²</div></div>`;
@@ -601,7 +618,8 @@ document.getElementById('calc').addEventListener('click',()=>{
       `<div class="msgs"><div class="msg err">Bitte mindestens ein vollständiges Paket eingeben.</div></div>`;
     return;
   }
-  const res=optimize(list);
+  const weightLimit=document.getElementById('weightLimit').checked;
+  const res=optimize(list,{weightLimit});
   if(errors.length) res.warnings.unshift(...errors);
   render(res);
   document.getElementById('resultPanel').scrollIntoView({behavior:'smooth',block:'start'});

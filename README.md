@@ -45,6 +45,9 @@ Gewicht = Volumen × Faktor (kg/m³)
   **kein Überstand** in Längsrichtung, **kein Schweben**.
 - Paket­höhe ≤ 780 mm → **maximal 3 Lagen** (darüber höhenbegrenzt).
 - Gewicht (24 t) und Volumen (90 m³) werden lagenweise berücksichtigt.
+- Das **Maximalgewicht (24 t) lässt sich per Schalter deaktivieren**: das
+  Gewicht wird dann weiterhin berechnet und angezeigt, aber nicht mehr als
+  Beladegrenze angewendet (Warnhinweis bei Überschreitung).
 
 ## Funktionen
 
