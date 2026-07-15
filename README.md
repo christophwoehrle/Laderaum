@@ -64,6 +64,12 @@ Gewicht = Volumen × Faktor (kg/m³)
 - **Frei drehbare 3D-Simulation** der Beladung (eigenständiger Canvas-
   Renderer ohne Fremdbibliothek): Drehen per Maus/Touch, Zoomen per
   Scrollrad, Auto-Rotation und „Ansicht zurücksetzen".
+- **Lastverteilung / Achslasten** (Lastverteilungsplan): Nutzlast wird nach
+  dem Hebelgesetz auf Königszapfen (Sattellast) und Achsaggregat (Achslast)
+  verteilt; Lastschwerpunkt, zulässiger Schwerpunktbereich und Ampelstatus
+  werden angezeigt. Die Reihen werden längs automatisch so verschoben, dass
+  der Schwerpunkt möglichst im zulässigen Fenster liegt. Fahrzeugdaten
+  (Königszapfen-/Achsposition, max. Sattel-/Achslast) sind einstellbar.
 
 ## Berechnungslogik (Kurz)
 
@@ -78,3 +84,7 @@ Gewicht = Volumen × Faktor (kg/m³)
    Paket-Mischung je nach Maßen automatisch für maximale Beladung gewählt.
 4. Emission Lage für Lage von unten nach oben unter Beachtung von
    Gewicht (24 t) und Volumen (90 m³).
+5. Längs-Optimierung der Lastverteilung: Die Reihen werden innerhalb ihres
+   freien Spielraums verschoben, bis der Lastschwerpunkt im zulässigen
+   Fenster liegt (Achslasten nach Hebelgesetz). Reicht das nicht aus, wird
+   gewarnt (Ladung reduzieren bzw. anders verteilen).

@@ -143,6 +143,17 @@
     border-radius:8px;background:rgba(255,255,255,.9);color:var(--ink);cursor:pointer;backdrop-filter:blur(2px)}
   .c3d-ctrl button:hover{background:#fff}
   .c3d-ctrl button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .ax-panel{margin-top:14px;border:1px solid var(--line);background:var(--panel-2);border-radius:10px;padding:14px}
+  .ax-panel h3{margin:0 0 4px;font-size:.9rem;display:flex;align-items:center;gap:8px}
+  .ax-panel .axsub{font-size:.75rem;color:var(--muted);margin:0 0 12px}
+  .ax-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .ax-cell .k{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:700}
+  .ax-cell .v{font-size:1.2rem;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+  .ax-cell .sub{font-size:.73rem;color:var(--muted)}
+  .ax-status{display:inline-flex;align-items:center;gap:6px;font-size:.74rem;font-weight:700;padding:3px 9px;border-radius:99px}
+  .ax-status.ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+  .ax-status.bad{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+  .ax-diagram{margin-top:12px;width:100%;overflow:hidden}
   .c3d-hint{position:absolute;bottom:9px;left:12px;font-size:.74rem;color:#475569;
     background:rgba(255,255,255,.75);padding:3px 8px;border-radius:6px;pointer-events:none}
   @media (max-width:640px){
@@ -210,6 +221,17 @@
       <span class="spacer"></span>
       <button class="btn btn-primary" id="calc">Beladung optimieren →</button>
     </div>
+
+    <details class="hlp" id="axleCfg">
+      <summary>Achslasten / Fahrzeugdaten (Lastverteilung)</summary>
+      <div class="grid-order" style="margin-top:10px">
+        <div><label for="axKP">Königszapfen ab Stirnwand (mm)</label><input id="axKP" type="number" min="0" step="10" value="1600"></div>
+        <div><label for="axAX">Achsmitte (Aggregat) ab Stirnwand (mm)</label><input id="axAX" type="number" min="0" step="10" value="9300"></div>
+        <div><label for="axMaxKP">max. Sattellast (kg)</label><input id="axMaxKP" type="number" min="0" step="100" value="12000"></div>
+        <div><label for="axMaxAX">max. Achslast Achsaggregat (kg)</label><input id="axMaxAX" type="number" min="0" step="100" value="24000"></div>
+      </div>
+      <p class="hint" style="margin-top:8px">Typische Werte für einen 3-Achs-Sattelauflieger – bitte an das reale Fahrzeug anpassen. Berechnet wird die <b>Nutzlast</b>verteilung (ohne Eigengewicht/Tara) nach dem Hebelgesetz zwischen Königszapfen und Achsaggregat. Die Reihen werden längs so verschoben, dass der Lastschwerpunkt möglichst im zulässigen Bereich liegt.</p>
+    </details>
 
     <details class="hlp">
       <summary>Regeln &amp; Rahmendaten</summary>
@@ -512,10 +534,10 @@ function optimize(pkgs, opts={}){
       totW+=wt; totV+=vol;
       const layerBase = i*(UNDERLAY_H+s.h);      // Unterkante Unterlagsholz
       const zPkg = layerBase + UNDERLAY_H;       // Unterkante Paket
-      boxes.push({no:s.no,color:s.color,x:s.x,y:s.y,z:zPkg,l:s.l,w:s.w,h:s.h,layer:i});
+      boxes.push({no:s.no,color:s.color,x:s.x,y:s.y,z:zPkg,l:s.l,w:s.w,h:s.h,layer:i,wt});
       // 2 Unterlagshölzer (in Fahrtrichtung an den Enden)
-      underlays.push({x:s.x,                  z:layerBase, len:UNDERLAY_LEN});
-      underlays.push({x:s.x+s.l-UNDERLAY_LEN, z:layerBase, len:UNDERLAY_LEN});
+      underlays.push({x:s.x,                  y:s.y, z:layerBase, len:UNDERLAY_LEN});
+      underlays.push({x:s.x+s.l-UNDERLAY_LEN, y:s.y, z:layerBase, len:UNDERLAY_LEN});
       loaded[s.no]=(loaded[s.no]||0)+1;
       usedLayers++;
     }
@@ -530,6 +552,73 @@ function optimize(pkgs, opts={}){
     if(s.usedLayers>0){ floorArea += s.l*s.w; maxLayerUsed=Math.max(maxLayerUsed,s.usedLayers); }
   }
   const ldm = floorArea / TRUCK.W / 1000;  // Lademeter = genutzte Fläche(mm²)/Breite(mm) → m
+
+  // --- Achslasten / Lastverteilung ----------------------------------------
+  // Nutzlast verteilt sich nach dem Hebelgesetz zwischen Königszapfen (vorne)
+  // und Achsaggregat (hinten). Da Pakete nur längs verschoben werden dürfen,
+  // werden die Reihen innerhalb ihres freien Spielraums so geschoben, dass der
+  // Lastschwerpunkt möglichst ins zulässige Fenster fällt (beste Verteilung).
+  const ax = opts.axle || {};
+  const X_KP   = ax.kingpin ?? 1600;     // Königszapfen ab Stirnwand (mm)
+  const X_AX   = ax.axle    ?? 9300;     // Achsmitte ab Stirnwand (mm)
+  const MAX_KP = ax.maxKingpin ?? 12000; // max. Sattellast (kg)
+  const MAX_AX = ax.maxAxle    ?? 24000; // max. Achslast Aggregat (kg)
+  const span   = Math.max(1, X_AX - X_KP);
+
+  // Reihen (nach y) mit Gewicht, Schwerpunkt (Frontlage) und Spielraum
+  const laneMap = new Map();
+  for(const b of boxes){
+    let L = laneMap.get(b.y);
+    if(!L){ L={y:b.y, wt:0, mom:0}; laneMap.set(b.y, L); }
+    L.wt += b.wt; L.mom += b.wt*(b.x + b.l/2);
+  }
+  // Freier Längs-Spielraum je Reihe = Restlänge hinter der tatsächlich
+  // geladenen Grundfläche (entfallene Stapel geben Platz zum Verschieben frei).
+  const laneRight = {};
+  for(const b of boxes){ const end=b.x + b.l + GAP; if(!(b.y in laneRight) || end>laneRight[b.y]) laneRight[b.y]=end; }
+  const slackOf = {};
+  for(const y in laneRight) slackOf[y] = Math.max(0, TRUCK.L - laneRight[y]);
+
+  let P = totW;                          // Nutzlast gesamt (kg)
+  let axle = null;
+  if(P > 1e-6){
+    let frontMom=0, slackMom=0;
+    for(const L of laneMap.values()){
+      frontMom += L.mom;
+      slackMom += L.wt * (slackOf[L.y]||0);
+    }
+    const cogFront = frontMom / P;                 // Schwerpunkt bei Frontbeladung
+    const cogRear  = cogFront + slackMom / P;      // Schwerpunkt bei Heckverschiebung
+    // Zulässiges Schwerpunktfenster aus den Grenzlasten
+    const cogMaxRaw = X_KP + MAX_AX * span / P;       // Achsaggregat-Grenze
+    const cogMinRaw = X_KP + (P - MAX_KP) * span / P; // Königszapfen-Grenze
+    const feasible  = cogMinRaw <= cogMaxRaw;         // Nutzlast überhaupt verteilbar?
+    const cogMin = Math.max(0, cogMinRaw);
+    const cogMax = Math.min(TRUCK.L, cogMaxRaw);
+    // Zielschwerpunkt: Mitte des zulässigen Fensters, erreichbar begrenzt
+    const winMid = feasible ? (cogMin + cogMax) / 2 : (cogMinRaw + cogMaxRaw) / 2;
+    const target = Math.min(cogRear, Math.max(cogFront, winMid));
+    const f = cogRear>cogFront+1e-6 ? Math.min(1, Math.max(0, (target-cogFront)/(cogRear-cogFront))) : 0;
+    // Längsverschiebung anwenden (Boxen + Unterlagshölzer je Reihe)
+    const shiftOf = {};
+    for(const L of laneMap.values()) shiftOf[L.y] = f*(slackOf[L.y]||0);
+    for(const b of boxes)     b.x += (shiftOf[b.y]||0);
+    for(const u of underlays) u.x += (shiftOf[u.y]||0);
+    // Endgültiger Schwerpunkt & Auflagerkräfte
+    let mom=0; for(const b of boxes) mom += b.wt*(b.x + b.l/2);
+    const cog = mom / P;
+    const rAxle = P * (cog - X_KP) / span;
+    const rKing = P - rAxle;
+    axle = {
+      P, cog, rAxle, rKing, maxAxle:MAX_AX, maxKing:MAX_KP,
+      xKP:X_KP, xAX:X_AX, cogMin, cogMax, feasible,
+      okAxle: rAxle <= MAX_AX+1e-6, okKing: rKing <= MAX_KP+1e-6, kingNeg: rKing < 0
+    };
+    if(!feasible) warnings.push(`Nutzlast ${fmt(P)} kg übersteigt die Summe der zulässigen Auflagerlasten (${fmt(MAX_KP)} + ${fmt(MAX_AX)} kg) – keine zulässige Lastverteilung möglich, Ladung reduzieren.`);
+    if(!axle.okAxle) warnings.push(`Achslast Achsaggregat ${fmt(rAxle)} kg über zulässigen ${fmt(MAX_AX)} kg – Ladung leichter machen oder weiter nach vorne verteilen.`);
+    if(!axle.okKing) warnings.push(`Sattellast (Königszapfen) ${fmt(rKing)} kg über zulässigen ${fmt(MAX_KP)} kg – Ladung weiter nach hinten verteilen.`);
+    if(axle.kingNeg) warnings.push(`Rechnerisch negative Sattellast – Ladung liegt zu weit hinten (Kippgefahr/instabile Lenkung).`);
+  }
 
   // --- Gründe für nicht geladene Pakete -----------------------------------
   // Stapel ohne Platz auf der Ladefläche
@@ -553,7 +642,7 @@ function optimize(pkgs, opts={}){
   return {
     boxes, underlays, placed, shelves,
     stats:{ totW, totV, ldm, usedLen, maxLayerUsed, floorArea,
-            totReq, totLoad, requested, loaded, notLoaded, pkgInfo, weightLimit },
+            totReq, totLoad, requested, loaded, notLoaded, pkgInfo, weightLimit, axle },
     warnings
   };
 }
@@ -832,6 +921,57 @@ function setup3D(res){
    ========================================================================= */
 function bar(pct,cls){ return `<div class="bar ${cls}"><i style="width:${Math.min(100,pct)}%"></i></div>`; }
 
+// Lastverteilungs-Diagramm (schematisch, Draufsicht der Längsachse)
+function renderAxleDiagram(ax){
+  const M=200, vbW=TRUCK.L+2*M, vbH=920, beamY=430;
+  const X=x=>M+Math.max(0,Math.min(TRUCK.L,x));
+  const winA=X(ax.cogMin), winB=X(Math.min(TRUCK.L,ax.cogMax));
+  const okCog = ax.cog>=ax.cogMin-1 && ax.cog<=ax.cogMax+1 && ax.okAxle && ax.okKing;
+  const cogColor = okCog ? '#2563eb' : '#dc2626';
+  let s=`<svg viewBox="0 0 ${vbW} ${vbH}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Lastverteilung">`;
+  // zulässiges Schwerpunktfenster
+  if(winB>winA) s+=`<rect x="${winA}" y="${beamY-120}" width="${winB-winA}" height="240" fill="#16a34a" fill-opacity="0.13"/>`+
+                   `<text x="${(winA+winB)/2}" y="${beamY-140}" text-anchor="middle" font-size="42" fill="#166534" font-weight="600">zulässiger Schwerpunktbereich</text>`;
+  // Ladefläche / Balken
+  s+=`<rect x="${X(0)}" y="${beamY-14}" width="${TRUCK.L}" height="28" rx="6" fill="#cbd5e1" stroke="#94a3b8" stroke-width="2"/>`;
+  s+=`<text x="${X(0)}" y="${beamY-30}" text-anchor="middle" font-size="40" fill="#64748b">Stirnwand</text>`;
+  // Königszapfen (Dreieck)
+  const kx=X(ax.xKP);
+  s+=`<polygon points="${kx-70},${beamY+150} ${kx+70},${beamY+150} ${kx},${beamY+20}" fill="#334155"/>`;
+  s+=`<text x="${kx}" y="${beamY+205}" text-anchor="middle" font-size="40" fill="#334155" font-weight="600">Königszapfen</text>`;
+  s+=`<text x="${kx}" y="${beamY+250}" text-anchor="middle" font-size="38" fill="#64748b">${fmt(ax.rKing)} kg</text>`;
+  // Achsaggregat (3 Räder)
+  const axx=X(ax.xAX);
+  for(let i=-1;i<=1;i++) s+=`<circle cx="${axx+i*220}" cy="${beamY+110}" r="86" fill="#1e293b"/>`;
+  s+=`<text x="${axx}" y="${beamY+235}" text-anchor="middle" font-size="40" fill="#334155" font-weight="600">Achsaggregat</text>`;
+  s+=`<text x="${axx}" y="${beamY+280}" text-anchor="middle" font-size="38" fill="#64748b">${fmt(ax.rAxle)} kg</text>`;
+  // Schwerpunkt
+  const cx=X(ax.cog);
+  s+=`<line x1="${cx}" y1="${beamY-190}" x2="${cx}" y2="${beamY+150}" stroke="${cogColor}" stroke-width="6" stroke-dasharray="18 12"/>`;
+  s+=`<circle cx="${cx}" cy="${beamY}" r="26" fill="${cogColor}"/>`;
+  s+=`<text x="${cx}" y="${beamY-210}" text-anchor="middle" font-size="46" fill="${cogColor}" font-weight="700">Schwerpunkt ${fmt(ax.cog/1000,2)} m</text>`;
+  s+=`</svg>`;
+  return s;
+}
+
+function renderAxle(ax){
+  const kPct=ax.rKing/ax.maxKing*100, aPct=ax.rAxle/ax.maxAxle*100;
+  const stat=ok=> ok? `<span class="ax-status ok">✓ i.O.</span>` : `<span class="ax-status bad">✗ überschritten</span>`;
+  let h=`<div class="ax-panel"><h3>⚖️ Lastverteilung / Achslasten</h3>`;
+  h+=`<p class="axsub">Nutzlastverteilung nach Hebelgesetz (ohne Eigengewicht). Reihen wurden längs für eine zulässige Verteilung optimiert.</p>`;
+  h+=`<div class="ax-grid">`;
+  h+=`<div class="ax-cell"><div class="k">Sattellast (Königszapfen)</div><div class="v">${fmt(ax.rKing)} kg</div><div class="sub">von ${fmt(ax.maxKing)} kg</div>${bar(kPct, kPct>100?'err':kPct>90?'warn':'ok')}<div style="margin-top:6px">${stat(ax.okKing && !ax.kingNeg)}</div></div>`;
+  h+=`<div class="ax-cell"><div class="k">Achslast (Achsaggregat)</div><div class="v">${fmt(ax.rAxle)} kg</div><div class="sub">von ${fmt(ax.maxAxle)} kg</div>${bar(aPct, aPct>100?'err':aPct>90?'warn':'ok')}<div style="margin-top:6px">${stat(ax.okAxle)}</div></div>`;
+  h+=`<div class="ax-cell"><div class="k">Lastschwerpunkt</div><div class="v">${fmt(ax.cog/1000,2)} m</div><div class="sub">ab Stirnwand · Nutzlast ${fmt(ax.P)} kg</div></div>`;
+  h+= ax.feasible
+    ? `<div class="ax-cell"><div class="k">Zulässiger Bereich</div><div class="v">${fmt(ax.cogMin/1000,2)}–${fmt(ax.cogMax/1000,2)} m</div><div class="sub">Schwerpunkt ab Stirnwand</div></div>`
+    : `<div class="ax-cell"><div class="k">Zulässiger Bereich</div><div class="v" style="color:var(--err)">—</div><div class="sub">Nutzlast zu hoch – Ladung reduzieren</div></div>`;
+  h+=`</div>`;
+  h+=`<div class="ax-diagram">${renderAxleDiagram(ax)}</div>`;
+  h+=`</div>`;
+  return h;
+}
+
 function render(res){
   const st=res.stats;
   const wPct=st.totW/MAX_WEIGHT*100;
@@ -863,6 +1003,9 @@ function render(res){
   html+=`<div class="stat"><div class="k">Lademeter</div><div class="v">${fmt(st.ldm,2)} ldm</div><div class="sub">Länge genutzt: ${fmt(st.usedLen/1000,2)} m</div></div>`;
   html+=`<div class="stat"><div class="k">Lagen (max.)</div><div class="v">${st.maxLayerUsed}</div><div class="sub">Ladefläche: ${fmt(st.floorArea/1e6,2)} m²</div></div>`;
   html+='</div>';
+
+  // Lastverteilung / Achslasten
+  if(st.axle) html+=renderAxle(st.axle);
 
   // Nicht geladene Pakete mit Begründung
   const nlRows=[];
@@ -940,7 +1083,14 @@ document.getElementById('calc').addEventListener('click',()=>{
     return;
   }
   const weightLimit=document.getElementById('weightLimit').checked;
-  const res=optimize(list,{weightLimit});
+  const numOr=(id,def)=>{ const v=+document.getElementById(id).value; return isFinite(v)&&v>0?v:def; };
+  const axle={
+    kingpin:    numOr('axKP',1600),
+    axle:       numOr('axAX',9300),
+    maxKingpin: numOr('axMaxKP',12000),
+    maxAxle:    numOr('axMaxAX',24000),
+  };
+  const res=optimize(list,{weightLimit, axle});
   if(errors.length) res.warnings.unshift(...errors);
   render(res);
   document.getElementById('resultPanel').scrollIntoView({behavior:'smooth',block:'start'});
