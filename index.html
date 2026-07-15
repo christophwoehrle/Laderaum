@@ -456,10 +456,51 @@ function planWidthGroups(stacks){
   return {placements, notPlaced, shelves};
 }
 
+// Strategie C: ausgewogene Reihen (LPT). Gleich breite Stapel bilden eigene
+// Reihen; jeder Stapel kommt längster-zuerst in die Reihe mit dem meisten
+// Restplatz. Das entspricht dem realen Beladen (lange Pakete zuerst hinter
+// die Kabine, kurze dahinter) und füllt die Reihen gleichmäßig dicht –
+// findet z. B. „P2+P1+P1 je Reihe", wo kürzeste-zuerst scheitert.
+function planBalancedLanes(stacks){
+  const groups=new Map();
+  for(const s of stacks){ if(!groups.has(s.footW)) groups.set(s.footW,[]); groups.get(s.footW).push(s); }
+  const widths=[...groups.keys()].sort((a,b)=> b-a);
+  const placements=[]; const shelves=[]; const notPlaced=[];
+  let nextY=0;
+  for(const w of widths){
+    const arr = groups.get(w).slice().sort((a,b)=> b.footL-a.footL); // längster zuerst
+    const maxLanes = Math.floor((TRUCK.W - nextY + 0.01)/w);
+    if(maxLanes<=0){ notPlaced.push(...arr); continue; }
+    const totalLen = arr.reduce((a,s)=> a+s.footL, 0);
+    let K = Math.min(maxLanes, Math.max(1, Math.ceil(totalLen/TRUCK.L)));
+    let lanes, leftover;
+    for(;;){
+      lanes=[]; for(let i=0;i<K;i++) lanes.push({y:nextY+i*w, used:0, items:[]});
+      leftover=[];
+      for(const s of arr){
+        let best=-1, bu=Infinity;
+        for(let i=0;i<lanes.length;i++)
+          if(lanes[i].used + s.footL <= TRUCK.L+0.01 && lanes[i].used < bu){ best=i; bu=lanes[i].used; }
+        if(best<0) leftover.push(s); else { lanes[best].used+=s.footL; lanes[best].items.push(s); }
+      }
+      if(leftover.length===0 || K>=maxLanes) break;
+      K++;                                    // mehr Platz vorhanden -> Reihe ergänzen
+    }
+    for(const lane of lanes){
+      let x=0;
+      for(const s of lane.items){ placements.push({s,x,y:lane.y}); x+=s.footL; }
+      shelves.push({y:lane.y, width:w, cursorX:lane.used});
+    }
+    notPlaced.push(...leftover);
+    nextY += K*w;
+  }
+  return {placements, notPlaced, shelves};
+}
+
 function packFloor(stacks){
   const score = p => p.placements.reduce((a,q)=> a + q.s.layers, 0);   // geladene Pakete
   const area  = p => p.placements.reduce((a,q)=> a + q.s.l*q.s.w, 0);
-  const cands = [planMixedLanes(stacks), planWidthGroups(stacks)];
+  const cands = [planMixedLanes(stacks), planWidthGroups(stacks), planBalancedLanes(stacks)];
   let best=null;
   for(const p of cands){
     p._score=score(p); p._area=area(p);

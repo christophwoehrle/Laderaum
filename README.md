@@ -79,9 +79,12 @@ Gewicht = Volumen × Faktor (kg/m³)
 3. Grundflächen-Packung: es werden mehrere Misch-Strategien gerechnet und
    die Variante mit den **meisten geladenen Paketen** übernommen –
    (a) gemischte Reihen (breitester Stapel gibt die Reihenbreite vor, Rest
-   kürzeste-zuerst) und (b) nach Breite gruppierte Reihen mit
-   Knapsack-Auswahl über die Ladebreite (kein Breitenverlust). So wird die
-   Paket-Mischung je nach Maßen automatisch für maximale Beladung gewählt.
+   kürzeste-zuerst), (b) nach Breite gruppierte Reihen mit Knapsack-Auswahl
+   über die Ladebreite (kein Breitenverlust) und (c) ausgewogene Reihen
+   (LPT: längster Stapel zuerst in die leerste Reihe – entspricht dem realen
+   Beladen „lange Pakete hinter die Kabine, kurze dahinter" und füllt Reihen
+   gleichmäßig dicht). So wird die Paket-Mischung je nach Maßen automatisch
+   für maximale Beladung gewählt.
 4. Emission Lage für Lage von unten nach oben unter Beachtung von
    Gewicht (24 t) und Volumen (90 m³).
 5. Längs-Optimierung der Lastverteilung: Die Reihen werden innerhalb ihres
