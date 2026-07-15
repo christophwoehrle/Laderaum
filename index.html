@@ -134,6 +134,17 @@
   .rtag.space{background:#e0e7ff;color:#3730a3}
   .rtag.weight{background:#ffedd5;color:#9a3412}
   .rtag.volume{background:#dcfce7;color:#166534}
+  .c3d-wrap{position:relative;width:100%;border:1px solid var(--line);border-radius:10px;
+    background:linear-gradient(180deg,#eef4fb 0%,#e2eaf3 100%);overflow:hidden}
+  #c3d{display:block;width:100%;height:auto;touch-action:none;cursor:grab}
+  #c3d:active{cursor:grabbing}
+  .c3d-ctrl{position:absolute;top:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .c3d-ctrl button{font:600 .76rem/1 inherit;padding:7px 10px;border:1px solid var(--line);
+    border-radius:8px;background:rgba(255,255,255,.9);color:var(--ink);cursor:pointer;backdrop-filter:blur(2px)}
+  .c3d-ctrl button:hover{background:#fff}
+  .c3d-ctrl button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .c3d-hint{position:absolute;bottom:9px;left:12px;font-size:.74rem;color:#475569;
+    background:rgba(255,255,255,.75);padding:3px 8px;border-radius:6px;pointer-events:none}
   @media (max-width:640px){
     body{padding:10px}
     .panel{padding:14px}
@@ -575,6 +586,185 @@ function renderTop(res){
 }
 
 /* =========================================================================
+   3D-Simulation (eigenständiger Canvas-Renderer, keine Fremdbibliothek)
+   Perspektivische Projektion + Painter-Algorithmus, frei drehbar.
+   ========================================================================= */
+let _3d = { raf:0, resize:null };
+
+function shade(hex, f){
+  const n = parseInt(hex.slice(1),16);
+  const r = Math.min(255,((n>>16)&255)*f)|0;
+  const g = Math.min(255,((n>>8)&255)*f)|0;
+  const b = Math.min(255,(n&255)*f)|0;
+  return `rgb(${r},${g},${b})`;
+}
+
+// Box → 6 Flächen (Eckenreihenfolge außen umlaufend), mit Schattierung
+function boxFaces(x,y,z,l,w,h,color){
+  const c=[
+    [x,y,z],[x+l,y,z],[x+l,y+w,z],[x,y+w,z],
+    [x,y,z+h],[x+l,y,z+h],[x+l,y+w,z+h],[x,y+w,z+h]
+  ];
+  const F=[
+    {i:[4,5,6,7],s:1.00}, // oben
+    {i:[0,1,5,4],s:0.86}, // vorne (-Y)
+    {i:[1,2,6,5],s:0.80}, // rechts (+X)
+    {i:[3,7,6,2],s:0.72}, // hinten (+Y)
+    {i:[0,4,7,3],s:0.66}, // links (-X)
+    {i:[0,3,2,1],s:0.55}, // unten
+  ];
+  return F.map(f=>({ pts:f.i.map(k=>c[k]), fill:shade(color,f.s) }));
+}
+
+function setup3D(res){
+  const cv = document.getElementById('c3d');
+  if(!cv) return;
+  const ctx = cv.getContext('2d');
+  if(_3d.raf) cancelAnimationFrame(_3d.raf);
+  if(_3d.resize) window.removeEventListener('resize', _3d.resize);
+
+  // --- Szene aufbauen (zentriert um Laderaum-Mitte) ---
+  const CX=TRUCK.L/2, CY=TRUCK.W/2, CZ=TRUCK.H/2;
+  const faces=[];   // {pts:[[x,y,z]..], fill}
+  const addBox=(x,y,z,l,w,h,color)=>{ for(const f of boxFaces(x,y,z,l,w,h,color)) faces.push(f); };
+
+  // Räder (dunkel, unter dem Boden)
+  const wheelXs=[900, TRUCK.L-3200, TRUCK.L-2100, TRUCK.L-1000];
+  for(const wx of wheelXs){
+    addBox(wx-350, -60,        -820, 700, 260, 620, '#1e293b');
+    addBox(wx-350, TRUCK.W-200, -820, 700, 260, 620, '#1e293b');
+  }
+  // Unterlagshölzer
+  for(const u of res.underlays) addBox(u.x, 0, u.z, u.len, TRUCK.W, UNDERLAY_H, '#78350f');
+  // Pakete
+  for(const b of res.boxes) addBox(b.x, b.y, b.z, b.l, b.w, b.h, b.color);
+
+  // Bodenfläche (leicht transparent) als eigene Fläche
+  const floor={ pts:[[0,0,0],[TRUCK.L,0,0],[TRUCK.L,TRUCK.W,0],[0,TRUCK.W,0]], fill:'rgba(148,163,184,0.20)' };
+
+  // Kanten des Laderaums (Drahtgitter)
+  const V=[
+    [0,0,0],[TRUCK.L,0,0],[TRUCK.L,TRUCK.W,0],[0,TRUCK.W,0],
+    [0,0,TRUCK.H],[TRUCK.L,0,TRUCK.H],[TRUCK.L,TRUCK.W,TRUCK.H],[0,TRUCK.W,TRUCK.H]
+  ];
+  const E=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+
+  // --- Zustand / Kamera ---
+  const st={ yaw:-0.62, pitch:0.48, zoom:1, camDist:24000, focal:1, cx:0, cy:0 };
+  const DEF={ yaw:-0.62, pitch:0.48, zoom:1 };
+
+  function rot(p){
+    const cyw=Math.cos(st.yaw), syw=Math.sin(st.yaw);
+    let x=(p[0]-CX)*cyw-(p[1]-CY)*syw;
+    let y=(p[0]-CX)*syw+(p[1]-CY)*cyw;
+    let z=p[2]-CZ;
+    const cp=Math.cos(st.pitch), sp=Math.sin(st.pitch);
+    return { x, y:y*cp-z*sp, z:y*sp+z*cp };
+  }
+  function proj(p){
+    const r=rot(p);
+    const depth=r.y+st.camDist;
+    const s=(st.focal*st.zoom)/depth;
+    return { X:st.cx+r.x*s, Y:st.cy-r.z*s, depth };
+  }
+
+  // Auto-Fit (in CSS-Pixeln): Brennweite so, dass der Laderaum ins Canvas passt
+  function fit(w,h){
+    let mx=1e-9, my=1e-9;
+    for(const v of V){
+      const r=rot(v), depth=r.y+st.camDist;
+      mx=Math.max(mx, Math.abs(r.x/depth));
+      my=Math.max(my, Math.abs(r.z/depth));
+    }
+    st.focal=Math.min((w/2)*0.90/mx, (h/2)*0.90/my);
+  }
+
+  function resize(){
+    const w=cv.parentElement.clientWidth;
+    const h=Math.max(320, Math.min(560, Math.round(w*0.5)));
+    const dpr=Math.min(2, window.devicePixelRatio||1);
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    cv.style.height=h+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);   // ab jetzt in CSS-Pixeln zeichnen
+    st.cx=w/2; st.cy=h/2;
+    fit(w,h);
+    draw();
+  }
+
+  function draw(){
+    const w=st.cx*2, h=st.cy*2;
+    ctx.clearRect(0,0,w,h);
+    // alle Flächen sammeln (inkl. Boden), nach Tiefe sortieren (fern zuerst)
+    const list=[];
+    const push=(f)=>{
+      const P=f.pts.map(proj);
+      let d=0; for(const p of P) d+=p.depth; d/=P.length;
+      list.push({P, fill:f.fill, d});
+    };
+    push(floor);
+    for(const f of faces) push(f);
+    list.sort((a,b)=>b.d-a.d);
+    for(const f of list){
+      ctx.beginPath();
+      ctx.moveTo(f.P[0].X, f.P[0].Y);
+      for(let i=1;i<f.P.length;i++) ctx.lineTo(f.P[i].X, f.P[i].Y);
+      ctx.closePath();
+      ctx.fillStyle=f.fill; ctx.fill();
+      ctx.lineWidth=0.6; ctx.strokeStyle='rgba(15,23,42,0.35)'; ctx.stroke();
+    }
+    // Laderaum-Drahtgitter oben drauf
+    ctx.lineWidth=1.4; ctx.strokeStyle='rgba(30,41,59,0.55)';
+    ctx.beginPath();
+    for(const e of E){ const a=proj(V[e[0]]), b=proj(V[e[1]]); ctx.moveTo(a.X,a.Y); ctx.lineTo(b.X,b.Y); }
+    ctx.stroke();
+    // Fahrtrichtungs-Pfeil (entlang X am Boden)
+    const a0=proj([300,CY,60]), a1=proj([2600,CY,60]);
+    ctx.strokeStyle='rgba(37,99,235,0.9)'; ctx.lineWidth=2.4;
+    ctx.beginPath(); ctx.moveTo(a0.X,a0.Y); ctx.lineTo(a1.X,a1.Y); ctx.stroke();
+    const ang=Math.atan2(a1.Y-a0.Y, a1.X-a0.X);
+    ctx.beginPath(); ctx.moveTo(a1.X,a1.Y);
+    ctx.lineTo(a1.X-14*Math.cos(ang-0.4), a1.Y-14*Math.sin(ang-0.4));
+    ctx.lineTo(a1.X-14*Math.cos(ang+0.4), a1.Y-14*Math.sin(ang+0.4));
+    ctx.closePath(); ctx.fillStyle='rgba(37,99,235,0.9)'; ctx.fill();
+    ctx.fillStyle='#1e40af'; ctx.font='600 12px sans-serif';
+    ctx.fillText('Fahrtrichtung', a0.X, a0.Y-8);
+  }
+
+  // --- Interaktion ---
+  let drag=false, px=0, py=0;
+  cv.addEventListener('pointerdown', e=>{ drag=true; px=e.clientX; py=e.clientY; cv.setPointerCapture(e.pointerId); autoOff(); });
+  cv.addEventListener('pointermove', e=>{
+    if(!drag) return;
+    st.yaw += (e.clientX-px)*0.008;
+    st.pitch += (e.clientY-py)*0.008;
+    st.pitch=Math.max(-1.45, Math.min(1.45, st.pitch));
+    px=e.clientX; py=e.clientY; draw();
+  });
+  cv.addEventListener('pointerup', e=>{ drag=false; });
+  cv.addEventListener('wheel', e=>{
+    e.preventDefault();
+    st.zoom *= (e.deltaY<0?1.1:0.9);
+    st.zoom=Math.max(0.3, Math.min(6, st.zoom));
+    draw();
+  }, {passive:false});
+
+  const rotBtn=document.getElementById('c3dRot');
+  const resetBtn=document.getElementById('c3dReset');
+  function autoOff(){ if(_3d.raf){ cancelAnimationFrame(_3d.raf); _3d.raf=0; rotBtn.classList.remove('on'); } }
+  rotBtn.addEventListener('click', ()=>{
+    if(_3d.raf){ autoOff(); return; }
+    rotBtn.classList.add('on');
+    const step=()=>{ st.yaw+=0.006; draw(); _3d.raf=requestAnimationFrame(step); };
+    _3d.raf=requestAnimationFrame(step);
+  });
+  resetBtn.addEventListener('click', ()=>{ autoOff(); st.yaw=DEF.yaw; st.pitch=DEF.pitch; st.zoom=DEF.zoom; draw(); });
+
+  _3d.resize=resize;
+  window.addEventListener('resize', resize);
+  resize();
+}
+
+/* =========================================================================
    Ergebnis rendern
    ========================================================================= */
 function bar(pct,cls){ return `<div class="bar ${cls}"><i style="width:${Math.min(100,pct)}%"></i></div>`; }
@@ -645,6 +835,16 @@ function render(res){
     html+=`<div class="view-title" style="margin-top:16px"><span>Draufsicht <small>(Länge × Breite, ohne Räder – unterste Lage, ×N = Anzahl Lagen)</small></span></div>`;
     html+=`<div class="svg-box">${renderTop(res)}</div>`;
 
+    html+=`<div class="view-title" style="margin-top:16px"><span>3D-Simulation <small>(frei drehbar)</small></span></div>`;
+    html+=`<div class="c3d-wrap">
+      <canvas id="c3d"></canvas>
+      <div class="c3d-ctrl">
+        <button id="c3dRot" type="button">⟳ Auto-Rotation</button>
+        <button id="c3dReset" type="button">Ansicht zurücksetzen</button>
+      </div>
+      <div class="c3d-hint">Ziehen zum Drehen · Scrollen zum Zoomen</div>
+    </div>`;
+
     // Legende
     html+='<div class="legend">';
     const seen={};
@@ -663,6 +863,7 @@ function render(res){
   }
 
   document.getElementById('results').innerHTML=html;
+  if(res.boxes.length) setup3D(res);
 }
 
 /* =========================================================================

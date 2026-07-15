@@ -61,6 +61,9 @@ Gewicht = Volumen × Faktor (kg/m³)
   zu groß für den Laderaum (inkl. überschrittenem Maß), kein Platz auf der
   Ladefläche, Maximalgewicht (24 t) oder Maximalvolumen (90 m³) erreicht.
 - Responsive **Seitenansicht** (mit Rädern) und **Draufsicht** (ohne Räder).
+- **Frei drehbare 3D-Simulation** der Beladung (eigenständiger Canvas-
+  Renderer ohne Fremdbibliothek): Drehen per Maus/Touch, Zoomen per
+  Scrollrad, Auto-Rotation und „Ansicht zurücksetzen".
 
 ## Berechnungslogik (Kurz)
 
