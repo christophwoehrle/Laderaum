@@ -122,6 +122,18 @@
     border-radius:9px;background:var(--panel-2)}
   .opt input{width:16px;height:16px;margin:0;accent-color:var(--accent);cursor:pointer;flex:0 0 auto}
   .stat.muted .v{color:var(--muted)}
+  .nl-panel{margin-top:14px;border:1px solid #fde68a;background:#fffdf5;border-radius:10px;padding:12px 14px}
+  .nl-panel h3{margin:0 0 10px;font-size:.9rem;color:#92400e;display:flex;align-items:center;gap:8px}
+  .nl-tbl{width:100%;border-collapse:collapse;min-width:560px}
+  .nl-tbl th,.nl-tbl td{text-align:left;padding:7px 8px;font-size:.82rem;border-bottom:1px solid #fde68a}
+  .nl-tbl th{font-size:.7rem;text-transform:uppercase;letter-spacing:.03em;color:#a16207;font-weight:700}
+  .nl-tbl tr:last-child td{border-bottom:none}
+  .nl-tbl td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+  .rtag{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+  .rtag.oversize{background:#fee2e2;color:#991b1b}
+  .rtag.space{background:#e0e7ff;color:#3730a3}
+  .rtag.weight{background:#ffedd5;color:#9a3412}
+  .rtag.volume{background:#dcfce7;color:#166534}
   @media (max-width:640px){
     body{padding:10px}
     .panel{padding:14px}
@@ -338,13 +350,23 @@ function optimize(pkgs, opts={}){
 
   // --- Stapel bilden ------------------------------------------------------
   const stacks=[];
-  const requested={}; const oversize=new Set();
+  const requested={};                 // Paketnr. -> bestellte Menge
+  const pkgInfo={};                    // Paketnr. -> {l,w,h,color,cat}
+  const notLoaded={};                  // Paketnr. -> {space,weight,volume,oversize,oversizeReason}
+  const nl = no => (notLoaded[no] || (notLoaded[no]={space:0,weight:0,volume:0,oversize:0,oversizeReason:''}));
+
   for(const p of pkgs){
     requested[p.no]=(requested[p.no]||0)+p.n;
+    pkgInfo[p.no]={l:p.l,w:p.w,h:p.h,color:p.color,cat:p.cat};
     // Passt das Paket überhaupt hinein?
-    if(p.l+2*GAP>TRUCK.L || p.w+2*GAP>TRUCK.W || (UNDERLAY_H+p.h)>TRUCK.H){
-      warnings.push(`Paket ${p.no} (${p.l}×${p.w}×${p.h} mm) passt nicht in den Laderaum und wird übersprungen.`);
-      oversize.add(p.no);
+    const tooLong=p.l+2*GAP>TRUCK.L, tooWide=p.w+2*GAP>TRUCK.W, tooHigh=(UNDERLAY_H+p.h)>TRUCK.H;
+    if(tooLong||tooWide||tooHigh){
+      const d=nl(p.no); d.oversize+=p.n;
+      const r=[];
+      if(tooLong) r.push(`Länge ${p.l} mm > ${TRUCK.L-2*GAP} mm nutzbar`);
+      if(tooWide) r.push(`Breite ${p.w} mm > ${TRUCK.W-2*GAP} mm nutzbar`);
+      if(tooHigh) r.push(`Höhe ${p.h} mm + 72 mm Unterlage > ${TRUCK.H} mm`);
+      d.oversizeReason=r.join('; ');
       continue;
     }
     const cap = maxLayers(p.h);
@@ -435,6 +457,15 @@ function optimize(pkgs, opts={}){
   }
   const ldm = floorArea / TRUCK.W / 1000;  // Lademeter = genutzte Fläche(mm²)/Breite(mm) → m
 
+  // --- Gründe für nicht geladene Pakete -----------------------------------
+  // Stapel ohne Platz auf der Ladefläche
+  for(const s of notPlaced) nl(s.no).space += s.layers;
+  // Platzierte Stapel, deren Lagen wegen Gewicht/Volumen entfielen
+  for(const s of placed){
+    const missing = s.layers - (s.usedLayers||0);
+    if(missing>0 && budgetHit) nl(s.no)[budgetHit] += missing;
+  }
+
   // fehlende Pakete
   let totReq=0, totLoad=0;
   for(const k in requested) totReq+=requested[k];
@@ -442,14 +473,13 @@ function optimize(pkgs, opts={}){
 
   if(budgetHit==='weight') warnings.push(`Maximales Gewicht von 24 t erreicht – nicht alle Pakete konnten geladen werden.`);
   if(budgetHit==='volume') warnings.push(`Maximales Volumen von 90 m³ erreicht – nicht alle Pakete konnten geladen werden.`);
-  if(notPlaced.length)     warnings.push(`${notPlaced.reduce((a,s)=>a+s.layers,0)} Paket(e) passen nicht mehr auf die Ladefläche.`);
   if(!weightLimit && totW > MAX_WEIGHT+1e-6)
     warnings.push(`Gewichtslimit deaktiviert: Beladung wiegt ${fmt(totW)} kg und überschreitet die 24 t – bitte gesondert prüfen (z. B. Achslasten).`);
 
   return {
     boxes, underlays, placed, shelves,
     stats:{ totW, totV, ldm, usedLen, maxLayerUsed, floorArea,
-            totReq, totLoad, requested, loaded, oversize:[...oversize], weightLimit },
+            totReq, totLoad, requested, loaded, notLoaded, pkgInfo, weightLimit },
     warnings
   };
 }
@@ -580,6 +610,33 @@ function render(res){
   html+=`<div class="stat"><div class="k">Lademeter</div><div class="v">${fmt(st.ldm,2)} ldm</div><div class="sub">Länge genutzt: ${fmt(st.usedLen/1000,2)} m</div></div>`;
   html+=`<div class="stat"><div class="k">Lagen (max.)</div><div class="v">${st.maxLayerUsed}</div><div class="sub">Ladefläche: ${fmt(st.floorArea/1e6,2)} m²</div></div>`;
   html+='</div>';
+
+  // Nicht geladene Pakete mit Begründung
+  const nlRows=[];
+  for(const no in st.notLoaded){
+    const d=st.notLoaded[no], info=st.pkgInfo[no]||{};
+    const add=(cnt,cls,label,extra)=>{ if(cnt>0) nlRows.push({no,info,cnt,cls,label,extra:extra||''}); };
+    add(d.oversize,'oversize','Zu groß für den Laderaum',d.oversizeReason);
+    add(d.space,  'space', 'Kein Platz mehr auf der Ladefläche');
+    add(d.weight, 'weight','Maximalgewicht (24 t) erreicht');
+    add(d.volume, 'volume','Maximalvolumen (90 m³) erreicht');
+  }
+  if(nlRows.length){
+    const total=nlRows.reduce((a,r)=>a+r.cnt,0);
+    html+=`<div class="nl-panel"><h3>⚠️ Nicht geladene Pakete (${total})</h3>`;
+    html+=`<div class="tbl-scroll"><table class="nl-tbl"><thead><tr>`+
+          `<th>Paket</th><th>Maße (mm)</th><th style="text-align:right">Anzahl</th><th>Grund</th></tr></thead><tbody>`;
+    for(const r of nlRows){
+      const dim = r.info.l?`${r.info.l}×${r.info.w}×${r.info.h}`:'–';
+      html+=`<tr>`+
+        `<td><span class="swatch" style="background:${r.info.color||'#94a3b8'}"></span> <b>${esc(r.no)}</b></td>`+
+        `<td>${esc(dim)}</td>`+
+        `<td class="num">${r.cnt}</td>`+
+        `<td><span class="rtag ${r.cls}">${r.label}</span>${r.extra?` <span style="color:#a16207">${esc(r.extra)}</span>`:''}</td>`+
+        `</tr>`;
+    }
+    html+=`</tbody></table></div></div>`;
+  }
 
   // Ansichten
   if(res.boxes.length){

@@ -57,6 +57,9 @@ Gewicht = Volumen × Faktor (kg/m³)
 - **Import aus PDF** (best effort): erkennt Zeilen mit Maßangaben
   (L × B × H) und optionaler Stückzahl sowie Auftragsnummer/Datum.
 - Kennzahlen: geladene Pakete, Gewicht, Volumen, Lademeter, Lagen.
+- **Aufstellung nicht geladener Pakete** mit Grund je Paketnummer:
+  zu groß für den Laderaum (inkl. überschrittenem Maß), kein Platz auf der
+  Ladefläche, Maximalgewicht (24 t) oder Maximalvolumen (90 m³) erreicht.
 - Responsive **Seitenansicht** (mit Rädern) und **Draufsicht** (ohne Räder).
 
 ## Berechnungslogik (Kurz)
