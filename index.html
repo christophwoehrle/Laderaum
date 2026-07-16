@@ -232,10 +232,14 @@
       <button class="btn btn-ghost" id="addRow">＋ Paket hinzufügen</button>
       <label class="btn btn-ghost" for="pdfInput" style="margin:0">📄 Import aus PDF</label>
       <input id="pdfInput" type="file" accept="application/pdf" style="display:none">
+      <button class="btn btn-ghost" id="btnExport" type="button" title="Auftrag als Datei speichern">💾 Auftrag speichern</button>
+      <label class="btn btn-ghost" for="importInput" style="margin:0" title="Auftrag aus Datei laden">📂 Auftrag laden</label>
+      <input id="importInput" type="file" accept="application/json,.json" style="display:none">
       <label class="opt" title="Bei deaktiviertem Limit wird das Gewicht berechnet und angezeigt, aber nicht als Beladegrenze angewendet.">
         <input type="checkbox" id="weightLimit" checked> Maximalgewicht (24 t) berücksichtigen
       </label>
       <span id="pdfStatus"></span>
+      <span id="ioStatus" class="hint"></span>
       <span class="spacer"></span>
       <button class="btn btn-primary" id="calc">Beladung optimieren →</button>
     </div>
@@ -353,10 +357,75 @@ document.getElementById('addRow').addEventListener('click',()=>{ addRow(); recol
   el.min = iso; el.value = iso;
 })();
 
-// Startzeile(n)
-addRow({no:'P1', l:4000, w:1000, h:145, n:12, cat:'hg'});
-addRow({no:'P2', l:5000, w:1200, h:200, n:8,  cat:'sf'});
-recolor();
+/* =========================================================================
+   Auftrag speichern / laden (localStorage + Datei-Export/Import)
+   ========================================================================= */
+const LS_KEY='laderaum_auftrag_v1';
+let _restoring=false, _saveT=0;
+const val = id => document.getElementById(id).value;
+
+function collectState(){
+  return {
+    v:1, ts:Date.now(),
+    auftrag: val('auftrag'), datum: val('datum'),
+    weightLimit: document.getElementById('weightLimit').checked,
+    axle:{ kp:val('axKP'), ax:val('axAX'), maxKP:val('axMaxKP'), maxAX:val('axMaxAX'), leerKP:val('axLeerKP'), leerAX:val('axLeerAX') },
+    rows:[...rowsEl.children].map(tr=>({
+      no:tr.querySelector('.f-no').value, l:tr.querySelector('.f-l').value,
+      w:tr.querySelector('.f-w').value,  h:tr.querySelector('.f-h').value,
+      n:tr.querySelector('.f-n').value,  cat:tr.querySelector('.f-cat').value
+    }))
+  };
+}
+function applyState(s){
+  if(!s || !Array.isArray(s.rows)) return false;
+  _restoring=true;
+  try{
+    if(s.auftrag!=null) document.getElementById('auftrag').value=s.auftrag;
+    if(s.datum) document.getElementById('datum').value=s.datum;
+    if(typeof s.weightLimit==='boolean') document.getElementById('weightLimit').checked=s.weightLimit;
+    const ax=s.axle||{}, setIf=(id,v)=>{ if(v!=null && v!=='') document.getElementById(id).value=v; };
+    setIf('axKP',ax.kp); setIf('axAX',ax.ax); setIf('axMaxKP',ax.maxKP);
+    setIf('axMaxAX',ax.maxAX); setIf('axLeerKP',ax.leerKP); setIf('axLeerAX',ax.leerAX);
+    rowsEl.innerHTML=''; rowSeq=0;
+    for(const r of s.rows) addRow({no:r.no, l:r.l, w:r.w, h:r.h, n:r.n, cat:r.cat});
+    if(!s.rows.length) addRow();
+    recolor();
+  } finally { _restoring=false; }
+  return true;
+}
+function saveLocal(){ if(_restoring) return; try{ localStorage.setItem(LS_KEY, JSON.stringify(collectState())); }catch(e){} }
+function scheduleSave(){ clearTimeout(_saveT); _saveT=setTimeout(saveLocal, 400); }
+function restoreLocal(){ try{ const raw=localStorage.getItem(LS_KEY); return raw ? applyState(JSON.parse(raw)) : false; }catch(e){ return false; } }
+
+document.addEventListener('input', scheduleSave);
+document.addEventListener('change', scheduleSave);
+
+document.getElementById('btnExport').addEventListener('click', ()=>{
+  const s=collectState();
+  const name=('Auftrag_'+(s.auftrag||'ohne')+'_'+(s.datum||'')+'.json').replace(/[^\w.\-]+/g,'_');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(s,null,2)],{type:'application/json'}));
+  a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  document.getElementById('ioStatus').textContent='Auftrag gespeichert.';
+});
+document.getElementById('importInput').addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{
+      if(applyState(JSON.parse(r.result))){ saveLocal(); document.getElementById('ioStatus').textContent='Auftrag geladen.'; }
+      else document.getElementById('ioStatus').textContent='Ungültige Auftragsdatei.';
+    }catch(err){ document.getElementById('ioStatus').textContent='Datei konnte nicht gelesen werden.'; } };
+  r.readAsText(f); e.target.value='';
+});
+
+// Startzeile(n): zuletzt gespeicherten Auftrag wiederherstellen, sonst Demo
+if(!restoreLocal()){
+  addRow({no:'P1', l:4000, w:1000, h:145, n:12, cat:'hg'});
+  addRow({no:'P2', l:5000, w:1200, h:200, n:8,  cat:'sf'});
+  recolor();
+}
 
 /* =========================================================================
    Eingaben lesen

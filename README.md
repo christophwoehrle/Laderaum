@@ -56,6 +56,9 @@ Gewicht = Volumen × Faktor (kg/m³)
   Paketnummer erhält eine durchgehend eindeutige Farbe.
 - **Import aus PDF** (best effort): erkennt Zeilen mit Maßangaben
   (L × B × H) und optionaler Stückzahl sowie Auftragsnummer/Datum.
+- **Auftrag speichern / laden**: Eingaben werden automatisch im Browser
+  gespeichert (überstehen einen Reload) und lassen sich als JSON-Datei
+  exportieren bzw. wieder importieren (Archiv/Weitergabe).
 - Kennzahlen: geladene Pakete, Gewicht, Volumen, Lademeter, Lagen.
 - **Beladeplan drucken / als PDF speichern**: druckoptimierte Ausgabe mit
   Auftrag/Datum, Kennzahlen, Lastverteilung, Seiten- und Draufsicht sowie
