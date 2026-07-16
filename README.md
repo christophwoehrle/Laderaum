@@ -42,7 +42,9 @@ Gewicht = Volumen × Faktor (kg/m³)
   Stapeln liegen sie jeweils unter dem aktuellen Paket.
 - Von unten nach oben wird der Innenraum maximal ausgenutzt.
 - Obere Lagen stehen nur auf **vollständig tragender** unterer Lage,
-  **kein Überstand** in Längsrichtung, **kein Schweben**.
+  **kein Überstand** in Längsrichtung, **kein Schweben**. Ein kürzeres
+  (oder gleich langes) Paket **gleicher Breite** darf auf einem längeren
+  stehen – dadurch wird der Laderaum maximal genutzt.
 - Paket­höhe ≤ 780 mm → **maximal 3 Lagen** (darüber höhenbegrenzt).
 - Gewicht (24 t) und Volumen (90 m³) werden lagenweise berücksichtigt.
 - Das **Maximalgewicht (24 t) lässt sich per Schalter deaktivieren**: das
@@ -88,7 +90,10 @@ Gewicht = Volumen × Faktor (kg/m³)
 
 1. Pro Paket wird die maximale Lagenzahl bestimmt
    (Höhenbegrenzung bzw. max. 3 bei Höhe ≤ 780 mm).
-2. Stapel gleicher Paketnummer garantieren volle Auflage ohne Überstand.
+2. Säulen werden gebildet – entweder aus gleicher Paketnummer/Maßen oder
+   **gemischt** (kürzeres/gleich langes Paket auf längerem, gleiche Breite,
+   volle Auflage). Beide Varianten gehen ins Ensemble ein; es gewinnt die
+   mit den meisten geladenen Paketen.
 3. Grundflächen-Packung: es werden mehrere Misch-Strategien gerechnet und
    die Variante mit den **meisten geladenen Paketen** übernommen –
    (a) gemischte Reihen (breitester Stapel gibt die Reihenbreite vor, Rest

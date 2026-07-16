@@ -265,7 +265,7 @@
         <li>Alle Maßangaben in mm. Länge bleibt immer parallel zur Fahrtrichtung – kein Drehen, nur längs/quer verschieben.</li>
         <li>10 mm Abstand in alle Richtungen zwischen den Paketen.</li>
         <li>Unterlagshölzer (Höhe 72 mm, 2 Stück) unter jedem Paket – auch beim Stapeln.</li>
-        <li>Obere Lagen nur auf vollständig tragender Fläche, kein Überstand in Längsrichtung, kein Schweben.</li>
+        <li>Obere Lagen nur auf vollständig tragender Fläche, kein Überstand in Längsrichtung, kein Schweben. Ein kürzeres (oder gleich langes) Paket gleicher Breite darf auf einem längeren stehen – so wird der Laderaum optimal genutzt.</li>
         <li>Paket­höhe ≤ 780 mm → maximal 3 Lagen. Gewicht = Volumen × Faktor (kg/m³).</li>
         <li>Das Maximalgewicht (24 t) lässt sich über den Schalter deaktivieren – dann wird das Gewicht nur berechnet und angezeigt, aber nicht als Beladegrenze angewendet.</li>
       </ul>
@@ -451,14 +451,15 @@ function readPackages(){
 /* =========================================================================
    Optimierung
    Achsen: X = Länge (Fahrtrichtung), Y = Breite (quer), Z = Höhe
-   Strategie:
-     1) Lagen pro Stapel = min(Höhen-Limit, 3 wenn Höhe<=780)
-     2) Stapel gleicher Paketnummer -> identische Grundfläche = volle
-        Auflage, kein Überstand.
-     3) Grundflächen-Packung (Regal-/Shelf-Heuristik, Breite absteigend)
-        füllt den Boden optimal aus.
+   Strategie (Ensemble „beste Variante gewinnt"):
+     1) Säulen bilden – entweder aus gleicher Paketnummer/Maßen oder
+        gemischt (kürzeres/gleich langes Paket auf längerem, gleiche Breite,
+        volle Auflage, kein Überstand); Lagen ≤ Höhenlimit (3 bei Höhe≤780).
+     2) Säulen reihenweise über die Breite packen (mehrere Reihen-Packer).
+     3) Es gewinnt die Kombination mit den meisten geladenen Paketen.
      4) Emission Lage für Lage unter Beachtung von Gewicht (24 t) und
-        Volumen (90 m³); volle Auflage von unten nach oben.
+        Volumen (90 m³); von unten nach oben.
+     5) Längs-Optimierung der Lastverteilung (Achslasten).
    ========================================================================= */
 function maxLayers(h){
   const perLayer = UNDERLAY_H + h;
@@ -587,14 +588,69 @@ function planBalancedLanes(stacks){
   return {placements, notPlaced, shelves};
 }
 
-function packFloor(stacks){
+/* -------------------------------------------------------------------------
+   Säulen (Stapel) bilden. Eine Säule ist ein Stapel von Paketen (unten →
+   oben), Grundfläche = unterstes (längstes) Paket. Regeln: gleiche Breite,
+   Länge nach oben nicht zunehmend (volle Auflage, kein Überstand), Höhe/
+   Lagenlimit (≤780 mm → max. 3). Zwei Bildungsarten, siehe packFloor.
+   ------------------------------------------------------------------------- */
+function makeCol(items){
+  const b=items[0];
+  return { items, footL:b.footL, footW:b.footW, l:b.l, w:b.w, layers:items.length };
+}
+function canStack(items, next){
+  // gleiche Breite + Länge nicht größer als das aktuell unterste tragende Paket
+  const bottom=items[items.length-1];
+  if(Math.abs(next.footW-bottom.footW)>0.01) return false;
+  if(next.l > bottom.l + 0.01) return false;
+  const cnt=items.length+1;
+  const allLow = next.h<=LOW_H && items.every(it=>it.h<=LOW_H);
+  if(allLow && cnt>MAX_LAYERS_LOW) return false;
+  let hsum=UNDERLAY_H+next.h; for(const it of items) hsum+=UNDERLAY_H+it.h;
+  return hsum<=TRUCK.H+1e-6;
+}
+// (a) Säulen aus gleicher Paketnummer/Maßen (identische Grundfläche)
+function sameNumberColumns(units){
+  const groups=new Map();
+  for(const u of units){ const k=u.no+'|'+u.l+'|'+u.w+'|'+u.h; (groups.get(k)||groups.set(k,[]).get(k)).push(u); }
+  const cols=[];
+  for(const arr of groups.values()){
+    const cap=Math.max(1, maxLayers(arr[0].h));
+    for(let i=0;i<arr.length;i+=cap) cols.push(makeCol(arr.slice(i,i+cap)));
+  }
+  return cols;
+}
+// (b) Gemischte Säulen je Breitenklasse: längstes zuerst, kürzere darauf
+//     (kürzer-auf-länger, volle Auflage). Minimiert die genutzte Bodenlänge.
+function mixedWidthColumns(units){
+  const groups=new Map();
+  for(const u of units){ if(!groups.has(u.footW)) groups.set(u.footW,[]); groups.get(u.footW).push(u); }
+  const cols=[];
+  for(const arr of groups.values()){
+    const s=arr.slice().sort((a,b)=> b.l-a.l || b.h-a.h); // längstes (dann höchstes) zuerst
+    let i=0;
+    while(i<s.length){
+      const items=[s[i++]];
+      while(i<s.length && canStack(items, s[i])) items.push(s[i++]);
+      cols.push(makeCol(items));
+    }
+  }
+  return cols;
+}
+
+function packFloor(units){
   const score = p => p.placements.reduce((a,q)=> a + q.s.layers, 0);   // geladene Pakete
   const area  = p => p.placements.reduce((a,q)=> a + q.s.l*q.s.w, 0);
-  const cands = [planMixedLanes(stacks), planWidthGroups(stacks), planBalancedLanes(stacks)];
+  const packers = [planMixedLanes, planWidthGroups, planBalancedLanes];
+  const formers = [sameNumberColumns, mixedWidthColumns];
   let best=null;
-  for(const p of cands){
-    p._score=score(p); p._area=area(p);
-    if(!best || p._score>best._score || (p._score===best._score && p._area>best._area)) best=p;
+  for(const former of formers){
+    const cols=former(units);
+    for(const packer of packers){
+      const p=packer(cols); p._score=score(p); p._area=area(p);
+      // strikt größer gewinnt -> bei Gleichstand bleibt einfachere (frühere) Variante
+      if(!best || p._score>best._score || (p._score===best._score && p._area>best._area)) best=p;
+    }
   }
   return best;
 }
@@ -603,8 +659,8 @@ function optimize(pkgs, opts={}){
   const weightLimit = opts.weightLimit !== false;   // Gewichtslimit aktiv?
   const warnings=[];
 
-  // --- Stapel bilden ------------------------------------------------------
-  const stacks=[];
+  // --- Paket-Einheiten bilden ---------------------------------------------
+  const units=[];                      // je Paket eine Einheit
   const requested={};                 // Paketnr. -> bestellte Menge
   const pkgInfo={};                    // Paketnr. -> {l,w,h,color,cat}
   const notLoaded={};                  // Paketnr. -> {space,weight,volume,oversize,oversizeReason}
@@ -624,24 +680,17 @@ function optimize(pkgs, opts={}){
       d.oversizeReason=r.join('; ');
       continue;
     }
-    const cap = maxLayers(p.h);
-    let rem = p.n;
-    while(rem>0){
-      const layers = Math.min(cap, rem);
-      stacks.push({
-        no:p.no, color:p.color, factor:p.factor,
-        l:p.l, w:p.w, h:p.h,
-        footL:p.l+GAP, footW:p.w+GAP,  // Grundfläche inkl. Abstand
-        layers
-      });
-      rem -= layers;
-    }
+    for(let k=0;k<p.n;k++) units.push({
+      no:p.no, color:p.color, factor:p.factor, l:p.l, w:p.w, h:p.h,
+      footL:p.l+GAP, footW:p.w+GAP
+    });
   }
 
-  // --- Grundflächen-Packung: beste Misch-Strategie wählen -----------------
-  // Es werden mehrere Packstrategien gerechnet und diejenige mit den
-  // meisten geladenen Paketen übernommen (siehe packFloor).
-  const plan = packFloor(stacks);
+  // --- Grundflächen-Packung: beste Strategie wählen -----------------------
+  // packFloor kombiniert Säulen-Bildung (gleiche Nr. bzw. gemischt kürzer-
+  // auf-länger) mit mehreren Reihen-Packern und nimmt die Variante mit den
+  // meisten geladenen Paketen.
+  const plan = packFloor(units);
   const shelves = plan.shelves;
   const placed = [];
   const notPlaced = plan.notPlaced;
@@ -656,20 +705,22 @@ function optimize(pkgs, opts={}){
   placed.sort((a,b)=> a.x-b.x || a.y-b.y);
 
   for(const s of placed){
-    let usedLayers=0;
-    for(let i=0;i<s.layers;i++){
-      const vol = s.l*s.w*s.h/1e9;      // m³
-      const wt  = vol*s.factor;         // kg
+    let usedLayers=0, z=0;
+    for(let i=0;i<s.items.length;i++){
+      const it=s.items[i];
+      const vol = it.l*it.w*it.h/1e9;   // m³
+      const wt  = vol*it.factor;        // kg
       if(weightLimit && totW+wt > MAX_WEIGHT+1e-6){ budgetHit=budgetHit||'weight'; break; }
       if(totV+vol > MAX_VOLUME+1e-6){ budgetHit=budgetHit||'volume'; break; }
       totW+=wt; totV+=vol;
-      const layerBase = i*(UNDERLAY_H+s.h);      // Unterkante Unterlagsholz
-      const zPkg = layerBase + UNDERLAY_H;       // Unterkante Paket
-      boxes.push({no:s.no,color:s.color,x:s.x,y:s.y,z:zPkg,l:s.l,w:s.w,h:s.h,layer:i,wt});
-      // 2 Unterlagshölzer (in Fahrtrichtung an den Enden)
-      underlays.push({x:s.x,                  y:s.y, z:layerBase, len:UNDERLAY_LEN});
-      underlays.push({x:s.x+s.l-UNDERLAY_LEN, y:s.y, z:layerBase, len:UNDERLAY_LEN});
-      loaded[s.no]=(loaded[s.no]||0)+1;
+      const layerBase = z;                       // Unterkante Unterlagsholz
+      const zPkg = layerBase + UNDERLAY_H;        // Unterkante Paket
+      boxes.push({no:it.no,color:it.color,x:s.x,y:s.y,z:zPkg,l:it.l,w:it.w,h:it.h,layer:i,wt});
+      // 2 Unterlagshölzer (unter dem aktuellen Paket, an dessen Enden)
+      underlays.push({x:s.x,                   y:s.y, z:layerBase, len:UNDERLAY_LEN});
+      underlays.push({x:s.x+it.l-UNDERLAY_LEN, y:s.y, z:layerBase, len:UNDERLAY_LEN});
+      loaded[it.no]=(loaded[it.no]||0)+1;
+      z += UNDERLAY_H + it.h;
       usedLayers++;
     }
     s.usedLayers=usedLayers;
@@ -766,12 +817,13 @@ function optimize(pkgs, opts={}){
   }
 
   // --- Gründe für nicht geladene Pakete -----------------------------------
-  // Stapel ohne Platz auf der Ladefläche
-  for(const s of notPlaced) nl(s.no).space += s.layers;
-  // Platzierte Stapel, deren Lagen wegen Gewicht/Volumen entfielen
+  // Säulen ohne Platz auf der Ladefläche
+  for(const s of notPlaced) for(const it of s.items) nl(it.no).space++;
+  // Platzierte Säulen, deren obere Pakete wegen Gewicht/Volumen entfielen
   for(const s of placed){
-    const missing = s.layers - (s.usedLayers||0);
-    if(missing>0 && budgetHit) nl(s.no)[budgetHit] += missing;
+    for(let i=(s.usedLayers||0); i<s.items.length; i++){
+      if(budgetHit) nl(s.items[i].no)[budgetHit]++;
+    }
   }
 
   // fehlende Pakete
