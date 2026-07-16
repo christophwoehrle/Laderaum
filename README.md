@@ -70,6 +70,9 @@ Gewicht = Volumen × Faktor (kg/m³)
   werden angezeigt. Die Reihen werden längs automatisch so verschoben, dass
   der Schwerpunkt möglichst im zulässigen Fenster liegt. Fahrzeugdaten
   (Königszapfen-/Achsposition, max. Sattel-/Achslast) sind einstellbar.
+  Optional kann das **Eigengewicht (Tara)** als Grundlast auf Königszapfen
+  und Achsaggregat angegeben werden – es wird zur Nutzlast addiert, sodass
+  die Grenzwerte gegen die Gesamtlast geprüft werden (0 = nur Nutzlast).
 
 ## Berechnungslogik (Kurz)
 

@@ -229,8 +229,10 @@
         <div><label for="axAX">Achsmitte (Aggregat) ab Stirnwand (mm)</label><input id="axAX" type="number" min="0" step="10" value="9300"></div>
         <div><label for="axMaxKP">max. Sattellast (kg)</label><input id="axMaxKP" type="number" min="0" step="100" value="12000"></div>
         <div><label for="axMaxAX">max. Achslast Achsaggregat (kg)</label><input id="axMaxAX" type="number" min="0" step="100" value="24000"></div>
+        <div><label for="axLeerKP">Eigengewicht auf Königszapfen (kg)</label><input id="axLeerKP" type="number" min="0" step="100" value="0"></div>
+        <div><label for="axLeerAX">Eigengewicht auf Achsaggregat (kg)</label><input id="axLeerAX" type="number" min="0" step="100" value="0"></div>
       </div>
-      <p class="hint" style="margin-top:8px">Typische Werte für einen 3-Achs-Sattelauflieger – bitte an das reale Fahrzeug anpassen. Berechnet wird die <b>Nutzlast</b>verteilung (ohne Eigengewicht/Tara) nach dem Hebelgesetz zwischen Königszapfen und Achsaggregat. Die Reihen werden längs so verschoben, dass der Lastschwerpunkt möglichst im zulässigen Bereich liegt.</p>
+      <p class="hint" style="margin-top:8px">Typische Werte für einen 3-Achs-Sattelauflieger – bitte an das reale Fahrzeug anpassen. Berechnet wird die Verteilung nach dem Hebelgesetz zwischen Königszapfen und Achsaggregat. Optional lässt sich das <b>Eigengewicht (Tara)</b> als Grundlast auf Königszapfen bzw. Achsaggregat angeben – es wird dann zur Nutzlast addiert, sodass die Grenzwerte gegen die Gesamtlast geprüft werden (0 = nur Nutzlast). Die Reihen werden längs so verschoben, dass der Lastschwerpunkt möglichst im zulässigen Bereich liegt.</p>
     </details>
 
     <details class="hlp">
@@ -604,6 +606,10 @@ function optimize(pkgs, opts={}){
   const X_AX   = ax.axle    ?? 9300;     // Achsmitte ab Stirnwand (mm)
   const MAX_KP = ax.maxKingpin ?? 12000; // max. Sattellast (kg)
   const MAX_AX = ax.maxAxle    ?? 24000; // max. Achslast Aggregat (kg)
+  const LEER_KP = Math.max(0, ax.leerKingpin ?? 0); // Eigengewichts-Anteil Sattellast (kg)
+  const LEER_AX = Math.max(0, ax.leerAxle    ?? 0); // Eigengewichts-Anteil Achslast (kg)
+  const CAP_KP = Math.max(0, MAX_KP - LEER_KP);     // Rest-Kapazität Sattellast für Nutzlast
+  const CAP_AX = Math.max(0, MAX_AX - LEER_AX);     // Rest-Kapazität Achslast für Nutzlast
   const span   = Math.max(1, X_AX - X_KP);
 
   // Reihen (nach y) mit Gewicht, Schwerpunkt (Frontlage) und Spielraum
@@ -630,9 +636,10 @@ function optimize(pkgs, opts={}){
     }
     const cogFront = frontMom / P;                 // Schwerpunkt bei Frontbeladung
     const cogRear  = cogFront + slackMom / P;      // Schwerpunkt bei Heckverschiebung
-    // Zulässiges Schwerpunktfenster aus den Grenzlasten
-    const cogMaxRaw = X_KP + MAX_AX * span / P;       // Achsaggregat-Grenze
-    const cogMinRaw = X_KP + (P - MAX_KP) * span / P; // Königszapfen-Grenze
+    // Zulässiges Schwerpunktfenster aus den (um das Eigengewicht reduzierten)
+    // Rest-Kapazitäten für die Nutzlast
+    const cogMaxRaw = X_KP + CAP_AX * span / P;       // Achsaggregat-Grenze
+    const cogMinRaw = X_KP + (P - CAP_KP) * span / P; // Königszapfen-Grenze
     const feasible  = cogMinRaw <= cogMaxRaw;         // Nutzlast überhaupt verteilbar?
     const cogMin = Math.max(0, cogMinRaw);
     const cogMax = Math.min(TRUCK.L, cogMaxRaw);
@@ -645,14 +652,16 @@ function optimize(pkgs, opts={}){
     for(const L of laneMap.values()) shiftOf[L.y] = f*(slackOf[L.y]||0);
     for(const b of boxes)     b.x += (shiftOf[b.y]||0);
     for(const u of underlays) u.x += (shiftOf[u.y]||0);
-    // Endgültiger Schwerpunkt & Auflagerkräfte
+    // Endgültiger Schwerpunkt & Auflagerkräfte (Nutzlast + Eigengewichtsanteil)
     let mom=0; for(const b of boxes) mom += b.wt*(b.x + b.l/2);
     const cog = mom / P;
-    const rAxle = P * (cog - X_KP) / span;
-    const rKing = P - rAxle;
+    const rAxlePay = P * (cog - X_KP) / span;
+    const rKingPay = P - rAxlePay;
+    const rAxle = rAxlePay + LEER_AX;
+    const rKing = rKingPay + LEER_KP;
     axle = {
-      P, cog, rAxle, rKing, maxAxle:MAX_AX, maxKing:MAX_KP,
-      xKP:X_KP, xAX:X_AX, cogMin, cogMax, feasible,
+      P, cog, rAxle, rKing, rAxlePay, rKingPay, leerAxle:LEER_AX, leerKing:LEER_KP,
+      maxAxle:MAX_AX, maxKing:MAX_KP, xKP:X_KP, xAX:X_AX, cogMin, cogMax, feasible,
       okAxle: rAxle <= MAX_AX+1e-6, okKing: rKing <= MAX_KP+1e-6, kingNeg: rKing < 0
     };
     if(!feasible) warnings.push(`Nutzlast ${fmt(P)} kg übersteigt die Summe der zulässigen Auflagerlasten (${fmt(MAX_KP)} + ${fmt(MAX_AX)} kg) – keine zulässige Lastverteilung möglich, Ladung reduzieren.`);
@@ -998,11 +1007,14 @@ function renderAxleDiagram(ax){
 function renderAxle(ax){
   const kPct=ax.rKing/ax.maxKing*100, aPct=ax.rAxle/ax.maxAxle*100;
   const stat=ok=> ok? `<span class="ax-status ok">✓ i.O.</span>` : `<span class="ax-status bad">✗ überschritten</span>`;
+  const tare = (ax.leerKing>0 || ax.leerAxle>0);
   let h=`<div class="ax-panel"><h3>⚖️ Lastverteilung / Achslasten</h3>`;
-  h+=`<p class="axsub">Nutzlastverteilung nach Hebelgesetz (ohne Eigengewicht). Reihen wurden längs für eine zulässige Verteilung optimiert.</p>`;
+  h+=`<p class="axsub">Verteilung nach Hebelgesetz${tare?' inkl. Eigengewicht (Tara)':' (nur Nutzlast, ohne Eigengewicht)'}. Reihen wurden längs für eine zulässige Verteilung optimiert.</p>`;
   h+=`<div class="ax-grid">`;
-  h+=`<div class="ax-cell"><div class="k">Sattellast (Königszapfen)</div><div class="v">${fmt(ax.rKing)} kg</div><div class="sub">von ${fmt(ax.maxKing)} kg</div>${bar(kPct, kPct>100?'err':kPct>90?'warn':'ok')}<div style="margin-top:6px">${stat(ax.okKing && !ax.kingNeg)}</div></div>`;
-  h+=`<div class="ax-cell"><div class="k">Achslast (Achsaggregat)</div><div class="v">${fmt(ax.rAxle)} kg</div><div class="sub">von ${fmt(ax.maxAxle)} kg</div>${bar(aPct, aPct>100?'err':aPct>90?'warn':'ok')}<div style="margin-top:6px">${stat(ax.okAxle)}</div></div>`;
+  const kSub = tare ? `von ${fmt(ax.maxKing)} kg · Nutzlast ${fmt(ax.rKingPay)} + Tara ${fmt(ax.leerKing)} kg` : `von ${fmt(ax.maxKing)} kg`;
+  const aSub = tare ? `von ${fmt(ax.maxAxle)} kg · Nutzlast ${fmt(ax.rAxlePay)} + Tara ${fmt(ax.leerAxle)} kg` : `von ${fmt(ax.maxAxle)} kg`;
+  h+=`<div class="ax-cell"><div class="k">Sattellast (Königszapfen)</div><div class="v">${fmt(ax.rKing)} kg</div><div class="sub">${kSub}</div>${bar(kPct, kPct>100?'err':kPct>90?'warn':'ok')}<div style="margin-top:6px">${stat(ax.okKing && !ax.kingNeg)}</div></div>`;
+  h+=`<div class="ax-cell"><div class="k">Achslast (Achsaggregat)</div><div class="v">${fmt(ax.rAxle)} kg</div><div class="sub">${aSub}</div>${bar(aPct, aPct>100?'err':aPct>90?'warn':'ok')}<div style="margin-top:6px">${stat(ax.okAxle)}</div></div>`;
   h+=`<div class="ax-cell"><div class="k">Lastschwerpunkt</div><div class="v">${fmt(ax.cog/1000,2)} m</div><div class="sub">ab Stirnwand · Nutzlast ${fmt(ax.P)} kg</div></div>`;
   h+= ax.feasible
     ? `<div class="ax-cell"><div class="k">Zulässiger Bereich</div><div class="v">${fmt(ax.cogMin/1000,2)}–${fmt(ax.cogMax/1000,2)} m</div><div class="sub">Schwerpunkt ab Stirnwand</div></div>`
@@ -1125,11 +1137,14 @@ document.getElementById('calc').addEventListener('click',()=>{
   }
   const weightLimit=document.getElementById('weightLimit').checked;
   const numOr=(id,def)=>{ const v=+document.getElementById(id).value; return isFinite(v)&&v>0?v:def; };
+  const num0=id=>{ const v=+document.getElementById(id).value; return isFinite(v)&&v>0?v:0; };
   const axle={
     kingpin:    numOr('axKP',1600),
     axle:       numOr('axAX',9300),
     maxKingpin: numOr('axMaxKP',12000),
     maxAxle:    numOr('axMaxAX',24000),
+    leerKingpin: num0('axLeerKP'),
+    leerAxle:    num0('axLeerAX'),
   };
   const res=optimize(list,{weightLimit, axle});
   if(errors.length) res.warnings.unshift(...errors);
