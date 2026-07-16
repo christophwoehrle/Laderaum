@@ -57,6 +57,10 @@ Gewicht = Volumen × Faktor (kg/m³)
 - **Import aus PDF** (best effort): erkennt Zeilen mit Maßangaben
   (L × B × H) und optionaler Stückzahl sowie Auftragsnummer/Datum.
 - Kennzahlen: geladene Pakete, Gewicht, Volumen, Lademeter, Lagen.
+- **Beladeplan drucken / als PDF speichern**: druckoptimierte Ausgabe mit
+  Auftrag/Datum, Kennzahlen, Lastverteilung, Seiten- und Draufsicht sowie
+  der Liste nicht geladener Pakete (Eingabefelder, 3D und Bedienelemente
+  werden im Druck ausgeblendet; die Ansichten drucken vektorscharf).
 - **Aufstellung nicht geladener Pakete** mit Grund je Paketnummer:
   zu groß für den Laderaum (inkl. überschrittenem Maß), kein Platz auf der
   Ladefläche, Maximalgewicht (24 t) oder Maximalvolumen (90 m³) erreicht.

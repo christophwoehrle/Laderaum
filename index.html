@@ -156,10 +156,28 @@
   .ax-diagram{margin-top:12px;width:100%;overflow:hidden}
   .c3d-hint{position:absolute;bottom:9px;left:12px;font-size:.74rem;color:#475569;
     background:rgba(255,255,255,.75);padding:3px 8px;border-radius:6px;pointer-events:none}
+  .res-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;
+    margin:0 0 14px;padding-bottom:10px;border-bottom:2px solid var(--line)}
+  .res-head .rh-title{font-size:1.05rem;font-weight:800}
+  .res-head .rh-meta{font-size:.83rem;color:var(--muted);margin-top:2px}
+  .res-head .rh-meta b{color:var(--ink);font-weight:700}
   @media (max-width:640px){
     body{padding:10px}
     .panel{padding:14px}
     header.app h1{font-size:1.1rem}
+  }
+  @media print{
+    @page{ margin:12mm; }
+    body{background:#fff;padding:0;color:#000}
+    .wrap{max-width:none}
+    header.app, .toolbar, details, .c3d-wrap, .c3d-ctrl, #pdfStatus, .btn, .no-print{display:none !important}
+    section.panel:not(#resultPanel){display:none !important}
+    #resultPanel{border:none;box-shadow:none;padding:0;margin:0}
+    #resultPanel > h2{display:none}
+    .svg-box{border:1px solid #bbb}
+    .view-title{break-after:avoid}
+    .stat,.ax-panel,.nl-panel,.svg-box,.ax-cell{break-inside:avoid}
+    .msg{border:1px solid #bbb}
   }
 </style>
 </head>
@@ -1033,6 +1051,18 @@ function render(res){
 
   let html='';
 
+  // Kopfzeile (Auftrag/Datum) + Druck-/PDF-Button
+  const auftrag = (document.getElementById('auftrag').value||'').trim();
+  const dISO = document.getElementById('datum').value||'';
+  const dDE = dISO ? dISO.split('-').reverse().join('.') : '—';
+  html+=`<div class="res-head">
+    <div>
+      <div class="rh-title">Beladeplan – Sattelzug (Tautliner)</div>
+      <div class="rh-meta">Auftrag <b>${esc(auftrag||'—')}</b> · Datum <b>${esc(dDE)}</b> · ${st.totLoad}/${st.totReq} Pakete · ${fmt(st.totW)} kg</div>
+    </div>
+    <button class="btn btn-ghost no-print" onclick="window.print()">🖨 Beladeplan drucken / PDF</button>
+  </div>`;
+
   // Meldungen
   if(res.warnings.length){
     html+='<div class="msgs">';
@@ -1094,7 +1124,7 @@ function render(res){
     html+=`<div class="view-title" style="margin-top:16px"><span>Draufsicht <small>(Länge × Breite, ohne Räder – unterste Lage, ×N = Anzahl Lagen)</small></span></div>`;
     html+=`<div class="svg-box">${renderTop(res)}</div>`;
 
-    html+=`<div class="view-title" style="margin-top:16px"><span>3D-Simulation <small>(frei drehbar)</small></span></div>`;
+    html+=`<div class="view-title no-print" style="margin-top:16px"><span>3D-Simulation <small>(frei drehbar)</small></span></div>`;
     html+=`<div class="c3d-wrap">
       <canvas id="c3d"></canvas>
       <div class="c3d-ctrl">
