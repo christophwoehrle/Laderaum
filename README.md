@@ -80,6 +80,9 @@ Gewicht = Volumen × Faktor (kg/m³)
   Optional kann das **Eigengewicht (Tara)** als Grundlast auf Königszapfen
   und Achsaggregat angegeben werden – es wird zur Nutzlast addiert, sodass
   die Grenzwerte gegen die Gesamtlast geprüft werden (0 = nur Nutzlast).
+  Zusätzlich kann eine **Mindest-Sattellast** (Untergrenze Königszapfen)
+  vorgegeben werden – sie sichert Traktion/Lenkstabilität, begrenzt den
+  Schwerpunkt nach hinten und wird geprüft (Warnung bei Unterschreitung).
 
 ## Berechnungslogik (Kurz)
 
