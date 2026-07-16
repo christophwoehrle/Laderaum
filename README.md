@@ -15,7 +15,7 @@ Internetverbindung benötigt (pdf.js über CDN).
 
 | Größe | Wert |
 |-------|------|
-| Länge | 13,60 m |
+| Länge | 13,50 m |
 | Breite | 2,48 m |
 | Höhe | 2,80 m |
 | Max. Volumen | 90 m³ |
@@ -34,7 +34,9 @@ Gewicht = Volumen × Faktor (kg/m³)
 
 ## Beladungsregeln
 
-- Alle Maßangaben in Millimeter (Länge × Breite × Höhe).
+- Alle Maßangaben in Millimeter (Länge × Breite × Höhe). In der Pakettabelle
+  wird i. d. R. nur die **Länge** eingegeben; **Breite (Vorgabe 1100 mm)**
+  und **Höhe (Vorgabe 700 mm)** sind voreingestellt und per Klick änderbar.
 - Pakete werden **nicht gedreht** – die Länge bleibt immer parallel zur
   Fahrtrichtung; verschoben wird nur längs und quer.
 - **10 mm Abstand** in alle Richtungen zwischen den Paketen.

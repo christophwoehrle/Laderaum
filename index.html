@@ -216,8 +216,8 @@
           <tr>
             <th style="width:110px">Paketnr.</th>
             <th>Länge (mm)</th>
-            <th>Breite (mm)</th>
-            <th>Höhe (mm)</th>
+            <th>Breite (mm) · Vorgabe 1100</th>
+            <th>Höhe (mm) · Vorgabe 700</th>
             <th class="colw">Anzahl</th>
             <th style="min-width:190px">Kategorie</th>
             <th style="width:70px">Farbe</th>
@@ -261,7 +261,7 @@
     <details class="hlp">
       <summary>Regeln &amp; Rahmendaten</summary>
       <ul>
-        <li>Innenraum: 13,60 m × 2,48 m × 2,80 m · Max. Volumen 90 m³ · Max. Gewicht 24 t</li>
+        <li>Innenraum: 13,50 m × 2,48 m × 2,80 m · Max. Volumen 90 m³ · Max. Gewicht 24 t</li>
         <li>Alle Maßangaben in mm. Länge bleibt immer parallel zur Fahrtrichtung – kein Drehen, nur längs/quer verschieben.</li>
         <li>10 mm Abstand in alle Richtungen zwischen den Paketen.</li>
         <li>Unterlagshölzer (Höhe 72 mm, 2 Stück) unter jedem Paket – auch beim Stapeln.</li>
@@ -287,7 +287,7 @@
 /* =========================================================================
    Konstanten (alle Längen in mm, Gewicht in kg, Volumen in m³)
    ========================================================================= */
-const TRUCK = { L:13600, W:2480, H:2800 };
+const TRUCK = { L:13500, W:2480, H:2800 };
 const MAX_VOLUME = 90;        // m³
 const MAX_WEIGHT = 24000;     // kg
 const GAP        = 10;        // mm Abstand ringsum
@@ -328,9 +328,9 @@ function addRow(data={}){
   tr.dataset.color = color;
   tr.innerHTML = `
     <td><input type="text"   class="f-no"    value="${data.no ?? ('P'+(idx+1))}"></td>
-    <td><input type="number" class="f-l" min="1" step="1" value="${data.l ?? ''}" placeholder="Länge"></td>
-    <td><input type="number" class="f-w" min="1" step="1" value="${data.w ?? ''}" placeholder="Breite"></td>
-    <td><input type="number" class="f-h" min="1" step="1" value="${data.h ?? ''}" placeholder="Höhe"></td>
+    <td><input type="number" class="f-l" min="1" step="1" value="${data.l ?? ''}" placeholder="Länge eingeben"></td>
+    <td><input type="number" class="f-w" min="1" step="1" value="${data.w ?? 1100}" title="Voreingestellt 1100 mm – bei Bedarf ändern"></td>
+    <td><input type="number" class="f-h" min="1" step="1" value="${data.h ?? 700}"  title="Voreingestellt 700 mm – bei Bedarf ändern"></td>
     <td><input type="number" class="f-n" min="1" step="1" value="${data.n ?? 1}"></td>
     <td><select class="f-cat">${catOptions(data.cat ?? 'hg')}</select></td>
     <td><span class="swatch" style="background:${color}"></span></td>
@@ -423,8 +423,8 @@ document.getElementById('importInput').addEventListener('change', e=>{
 
 // Startzeile(n): zuletzt gespeicherten Auftrag wiederherstellen, sonst Demo
 if(!restoreLocal()){
-  addRow({no:'P1', l:4000, w:1000, h:145, n:12, cat:'hg'});
-  addRow({no:'P2', l:5000, w:1200, h:200, n:8,  cat:'sf'});
+  addRow({no:'P1', l:4000, n:12, cat:'hg'});   // Breite/Höhe = Vorgabe 1100/700
+  addRow({no:'P2', l:5000, n:6,  cat:'sg'});
   recolor();
 }
 
@@ -892,7 +892,7 @@ function renderSide(res){
     }
   }
   // Maßangaben
-  s+=`<text x="${X(TRUCK.L/2)}" y="${M-30}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600">← 13,60 m →</text>`;
+  s+=`<text x="${X(TRUCK.L/2)}" y="${M-30}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600">← ${fmt(TRUCK.L/1000,2)} m →</text>`;
   s+=`<text x="${X(0)-42}" y="${M+TRUCK.H/2}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600" transform="rotate(-90 ${X(0)-42} ${M+TRUCK.H/2})">2,80 m</text>`;
   s+=`</svg>`;
   return s;
@@ -928,7 +928,7 @@ function renderTop(res){
            stroke="#0f172a" stroke-width="4">${esc(b.no)}${layersHere>1?` ×${layersHere}`:''}</text>`;
     }
   }
-  s+=`<text x="${X(TRUCK.L/2)}" y="${M-30}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600">← 13,60 m →</text>`;
+  s+=`<text x="${X(TRUCK.L/2)}" y="${M-30}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600">← ${fmt(TRUCK.L/1000,2)} m →</text>`;
   s+=`<text x="${X(0)-42}" y="${Y(TRUCK.W/2)}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600" transform="rotate(-90 ${X(0)-42} ${Y(TRUCK.W/2)})">2,48 m</text>`;
   s+=`</svg>`;
   return s;
