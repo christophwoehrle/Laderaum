@@ -63,7 +63,11 @@ Gewicht = Volumen × Faktor (kg/m³)
 - **Auftrag speichern / laden**: Eingaben werden automatisch im Browser
   gespeichert (überstehen einen Reload) und lassen sich als JSON-Datei
   exportieren bzw. wieder importieren (Archiv/Weitergabe).
-- Kennzahlen: geladene Pakete, Gewicht, Volumen, Lademeter, Lagen.
+- Optionales **m³-netto-Feld** je Paket (Netto-Holzvolumen): ist es gesetzt,
+  bestimmt es das Gewicht (Gewicht = m³ netto × Faktor); der Raumbedarf/die
+  90-m³-Grenze bleibt über das Umriss-Volumen L×B×H. Leer = Volumen aus L×B×H.
+- Kennzahlen: geladene Pakete, Gewicht, Volumen (Raum) inkl. Netto-Holzvolumen,
+  Lademeter, Lagen.
 - **Beladeplan drucken / als PDF speichern**: druckoptimierte Ausgabe mit
   Auftrag/Datum, Kennzahlen, Lastverteilung, Seiten- und Draufsicht sowie
   der Liste nicht geladener Pakete (Eingabefelder, 3D und Bedienelemente

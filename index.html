@@ -218,6 +218,7 @@
             <th>Länge (mm)</th>
             <th>Breite (mm) · Vorgabe 1100</th>
             <th>Höhe (mm) · Vorgabe 700</th>
+            <th style="width:90px">m³ netto</th>
             <th class="colw">Anzahl</th>
             <th style="min-width:190px">Kategorie</th>
             <th style="width:70px">Farbe</th>
@@ -331,6 +332,7 @@ function addRow(data={}){
     <td><input type="number" class="f-l" min="1" step="1" value="${data.l ?? ''}" placeholder="Länge eingeben"></td>
     <td><input type="number" class="f-w" min="1" step="1" value="${data.w ?? 1100}" title="Voreingestellt 1100 mm – bei Bedarf ändern"></td>
     <td><input type="number" class="f-h" min="1" step="1" value="${data.h ?? 700}"  title="Voreingestellt 700 mm – bei Bedarf ändern"></td>
+    <td><input type="number" class="f-m3" min="0" step="0.001" value="${data.m3 ?? ''}" placeholder="optional" title="Netto-Holzvolumen je Paket (bestimmt das Gewicht); leer = aus L×B×H"></td>
     <td><input type="number" class="f-n" min="1" step="1" value="${data.n ?? 1}"></td>
     <td><select class="f-cat">${catOptions(data.cat ?? 'hg')}</select></td>
     <td><span class="swatch" style="background:${color}"></span></td>
@@ -361,7 +363,7 @@ document.getElementById('addRow').addEventListener('click',()=>{ addRow(); recol
 /* =========================================================================
    Auftrag speichern / laden (localStorage + Datei-Export/Import)
    ========================================================================= */
-const LS_KEY='laderaum_auftrag_v2';   // v2: Vorgaben Breite 1100 / Höhe 700, Ladelänge 13,50 m
+const LS_KEY='laderaum_auftrag_v3';   // v3: Beispielauftrag 2026-2863 + m³-Feld
 let _restoring=false, _saveT=0;
 const val = id => document.getElementById(id).value;
 
@@ -374,7 +376,8 @@ function collectState(){
     rows:[...rowsEl.children].map(tr=>({
       no:tr.querySelector('.f-no').value, l:tr.querySelector('.f-l').value,
       w:tr.querySelector('.f-w').value,  h:tr.querySelector('.f-h').value,
-      n:tr.querySelector('.f-n').value,  cat:tr.querySelector('.f-cat').value
+      m3:tr.querySelector('.f-m3').value, n:tr.querySelector('.f-n').value,
+      cat:tr.querySelector('.f-cat').value
     }))
   };
 }
@@ -389,7 +392,7 @@ function applyState(s){
     setIf('axKP',ax.kp); setIf('axAX',ax.ax); setIf('axMaxKP',ax.maxKP);
     setIf('axMaxAX',ax.maxAX); setIf('axLeerKP',ax.leerKP); setIf('axLeerAX',ax.leerAX);
     rowsEl.innerHTML=''; rowSeq=0;
-    for(const r of s.rows) addRow({no:r.no, l:r.l, w:r.w, h:r.h, n:r.n, cat:r.cat});
+    for(const r of s.rows) addRow({no:r.no, l:r.l, w:r.w, h:r.h, m3:r.m3, n:r.n, cat:r.cat});
     if(!s.rows.length) addRow();
     recolor();
   } finally { _restoring=false; }
@@ -423,8 +426,23 @@ document.getElementById('importInput').addEventListener('change', e=>{
 
 // Startzeile(n): zuletzt gespeicherten Auftrag wiederherstellen, sonst Demo
 if(!restoreLocal()){
-  addRow({no:'P1', l:4000, n:12, cat:'hg'});   // Breite/Höhe = Vorgabe 1100/700
-  addRow({no:'P2', l:5000, n:6,  cat:'sg'});
+  // Beispielauftrag AV-Liste 2026-2863 (Sägewerk Hailfinger) – 9 Produkte / 6 Positionen.
+  // Paketmaße: Breite = Bretter-breit × Brett-H (liegend); Höhe = Bretter-hoch × Brett-B
+  // + Zwischenlatten (18 mm je Lage); m³ = Netto-Holzvolumen laut Auftrag.
+  document.getElementById('auftrag').value='2026-2863';
+  document.getElementById('datum').value='2026-07-21';
+  const ORDER=[
+    {no:'1a·30x160x4500', l:4500, w:1120, h:1086, m3:3.478, cat:'hg'},
+    {no:'1b·30x160x5000', l:5000, w:1120, h:1086, m3:3.864, cat:'hg'},
+    {no:'2a·40x60x4000',  l:4000, w:1080, h:1084, m3:3.283, cat:'hg'},
+    {no:'2b·40x60x5000',  l:5000, w:1080, h:1084, m3:4.104, cat:'hg'},
+    {no:'3·60x100x5000',  l:5000, w:1100, h:1074, m3:4.620, cat:'hg'},
+    {no:'4·60x280x5000',  l:5000, w:1120, h:1074, m3:4.704, cat:'hg'},
+    {no:'5a·100x100x3000',l:3000, w:1100, h:1044, m3:2.970, cat:'hg'},
+    {no:'5b·100x100x4000',l:4000, w:1100, h:1044, m3:3.960, cat:'hg'},
+    {no:'6·100x120x5000', l:5000, w:1080, h:1044, m3:4.860, cat:'hg'},
+  ];
+  for(const r of ORDER) addRow({no:r.no, l:r.l, w:r.w, h:r.h, m3:r.m3, n:1, cat:r.cat});
   recolor();
 }
 
@@ -440,10 +458,11 @@ function readPackages(){
     const h = +tr.querySelector('.f-h').value;
     const n = Math.floor(+tr.querySelector('.f-n').value);
     const cat = tr.querySelector('.f-cat').value;
+    const m3 = +tr.querySelector('.f-m3').value;   // Netto-Holzvolumen je Paket (optional)
     const color = tr.dataset.color;
     if(!l||!w||!h||!n) return; // leere Zeile ignorieren
     if(l<=0||w<=0||h<=0||n<=0){ errors.push(`Paket ${no}: ungültige Werte.`); return; }
-    list.push({no,l,w,h,n,cat,color,factor:CATEGORIES[cat].factor});
+    list.push({no,l,w,h,n,cat,color,factor:CATEGORIES[cat].factor, m3:(isFinite(m3)&&m3>0)?m3:0});
   });
   return {list,errors};
 }
@@ -681,7 +700,7 @@ function optimize(pkgs, opts={}){
       continue;
     }
     for(let k=0;k<p.n;k++) units.push({
-      no:p.no, color:p.color, factor:p.factor, l:p.l, w:p.w, h:p.h,
+      no:p.no, color:p.color, factor:p.factor, l:p.l, w:p.w, h:p.h, m3:p.m3||0,
       footL:p.l+GAP, footW:p.w+GAP
     });
   }
@@ -698,7 +717,7 @@ function optimize(pkgs, opts={}){
 
   // --- Emission mit Gewicht/Volumen-Budget --------------------------------
   const boxes=[]; const underlays=[];
-  let totW=0, totV=0; const loaded={};
+  let totW=0, totV=0, totNet=0; const loaded={};
   let budgetHit=null;
 
   // Reihenfolge: hinten/links zuerst (stabile, nachvollziehbare Beladung)
@@ -708,11 +727,13 @@ function optimize(pkgs, opts={}){
     let usedLayers=0, z=0;
     for(let i=0;i<s.items.length;i++){
       const it=s.items[i];
-      const vol = it.l*it.w*it.h/1e9;   // m³
-      const wt  = vol*it.factor;        // kg
+      const grossVol = it.l*it.w*it.h/1e9;        // Umriss-Volumen (Raum)
+      const netVol   = it.m3>0 ? it.m3 : grossVol; // Netto-Holzvolumen (Gewicht)
+      const vol = grossVol;             // Raumbedarf für 90-m³-Grenze
+      const wt  = netVol*it.factor;     // Gewicht aus Netto-Holzvolumen
       if(weightLimit && totW+wt > MAX_WEIGHT+1e-6){ budgetHit=budgetHit||'weight'; break; }
       if(totV+vol > MAX_VOLUME+1e-6){ budgetHit=budgetHit||'volume'; break; }
-      totW+=wt; totV+=vol;
+      totW+=wt; totV+=vol; totNet+=netVol;
       const layerBase = z;                       // Unterkante Unterlagsholz
       const zPkg = layerBase + UNDERLAY_H;        // Unterkante Paket
       boxes.push({no:it.no,color:it.color,x:s.x,y:s.y,z:zPkg,l:it.l,w:it.w,h:it.h,layer:i,wt});
@@ -838,7 +859,7 @@ function optimize(pkgs, opts={}){
 
   return {
     boxes, underlays, placed, shelves,
-    stats:{ totW, totV, ldm, usedLen, maxLayerUsed, floorArea,
+    stats:{ totW, totV, totNet, ldm, usedLen, maxLayerUsed, floorArea,
             totReq, totLoad, requested, loaded, notLoaded, pkgInfo, weightLimit, axle },
     warnings
   };
@@ -1214,7 +1235,7 @@ function render(res){
     const over = st.totW>MAX_WEIGHT;
     html+=`<div class="stat${over?'':' muted'}"><div class="k">Gewicht</div><div class="v">${fmt(st.totW)} kg</div><div class="sub">Limit deaktiviert${over?' · &gt; 24 t!':''}</div>${bar(wPct, over?'err':'warn')}</div>`;
   }
-  html+=`<div class="stat"><div class="k">Volumen</div><div class="v">${fmt(st.totV,1)} m³</div><div class="sub">von 90 m³</div>${bar(vPct, vPct>99.5?'err':vPct>85?'warn':'ok')}</div>`;
+  html+=`<div class="stat"><div class="k">Volumen (Raum)</div><div class="v">${fmt(st.totV,1)} m³</div><div class="sub">von 90 m³${st.totNet>0?` · Holz netto ${fmt(st.totNet,3)} m³`:''}</div>${bar(vPct, vPct>99.5?'err':vPct>85?'warn':'ok')}</div>`;
   html+=`<div class="stat"><div class="k">Lademeter</div><div class="v">${fmt(st.ldm,2)} ldm</div><div class="sub">Länge genutzt: ${fmt(st.usedLen/1000,2)} m</div></div>`;
   html+=`<div class="stat"><div class="k">Lagen (max.)</div><div class="v">${st.maxLayerUsed}</div><div class="sub">Ladefläche: ${fmt(st.floorArea/1e6,2)} m²</div></div>`;
   html+='</div>';
