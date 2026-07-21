@@ -657,20 +657,75 @@ function mixedWidthColumns(units){
   return cols;
 }
 
-function packFloor(units){
-  const score = p => p.placements.reduce((a,q)=> a + q.s.layers, 0);   // geladene Pakete
-  const area  = p => p.placements.reduce((a,q)=> a + q.s.l*q.s.w, 0);
-  const packers = [planMixedLanes, planWidthGroups, planBalancedLanes];
-  const formers = [sameNumberColumns, mixedWidthColumns];
-  let best=null;
-  for(const former of formers){
-    const cols=former(units);
-    for(const packer of packers){
-      const p=packer(cols); p._score=score(p); p._area=area(p);
-      // strikt größer gewinnt -> bei Gleichstand bleibt einfachere (frühere) Variante
-      if(!best || p._score>best._score || (p._score===best._score && p._area>best._area)) best=p;
-    }
+// Säulen-Plan (Stapel an fester x,y) -> Einzelpaket-Platzierungen mit z
+function expandColumnPlan(cp){
+  const placements=[]; const notPlacedU=[];
+  for(const q of cp.placements){
+    let z=0;
+    q.s.items.forEach((it,i)=>{ placements.push({u:it, x:q.x, y:q.y, z:z+UNDERLAY_H, layer:i}); z+=UNDERLAY_H+it.h; });
   }
+  for(const col of cp.notPlaced) for(const it of col.items) notPlacedU.push(it);
+  return {placements, notPlacedU, shelves:cp.shelves};
+}
+
+// Strategie D: lagenweise Reihen mit Auflage über die Länge (Brücken erlaubt).
+// Basislage füllen, obere Lagen auf die tragende Länge darunter – ein Paket
+// darf über mehreren unteren liegen (nur „kein Überstand in Längsrichtung").
+function planLayeredLanes(units){
+  if(!units.length) return {placements:[], notPlacedU:[], shelves:[]};
+  const maxFW=Math.max(...units.map(u=>u.footW));
+  const N=Math.max(1, Math.floor((TRUCK.W+0.01)/maxFW));
+  const lanes=[]; for(let i=0;i<N;i++) lanes.push({y:i*maxFW, layers:[], height:0});
+  const rem=units.slice().sort((a,b)=> b.footL-a.footL || b.h-a.h);
+  const notPlacedU=[];
+  for(const u of rem){
+    let done=false;
+    // 1) in eine bestehende Lage einfügen (längs tragend, nicht höher als Lage)
+    for(const lane of lanes){
+      for(let li=0; li<lane.layers.length; li++){
+        const support = li===0 ? TRUCK.L : lane.layers[li-1].length;
+        const layer=lane.layers[li];
+        if(u.h<=layer.maxH+1e-6 && layer.length+u.footL <= support+0.01){
+          layer.packages.push({u,x:layer.length}); layer.length+=u.footL; done=true; break;
+        }
+      }
+      if(done) break;
+    }
+    if(done) continue;
+    // 2) neue oberste Lage (Höhe/Lagenlimit/Auflage prüfen)
+    for(const lane of lanes){
+      const li=lane.layers.length;
+      const support = li===0 ? TRUCK.L : lane.layers[li-1].length;
+      const cnt=li+1;
+      const allLow = u.h<=LOW_H && lane.layers.every(L=>L.maxH<=LOW_H);
+      if(allLow && cnt>MAX_LAYERS_LOW) continue;
+      if(lane.height + UNDERLAY_H + u.h > TRUCK.H+1e-6) continue;
+      if(u.footL <= support+0.01){
+        lane.layers.push({packages:[{u,x:0}], length:u.footL, maxH:u.h, zBase:lane.height});
+        lane.height += UNDERLAY_H+u.h; done=true; break;
+      }
+    }
+    if(!done) notPlacedU.push(u);
+  }
+  const placements=[]; const shelves=[];
+  for(const lane of lanes){
+    if(!lane.layers.length) continue;
+    lane.layers.forEach((layer,li)=>{ for(const pk of layer.packages) placements.push({u:pk.u, x:pk.x, y:lane.y, z:layer.zBase+UNDERLAY_H, layer:li}); });
+    shelves.push({y:lane.y, width:maxFW, cursorX:lane.layers[0].length});
+  }
+  return {placements, notPlacedU, shelves};
+}
+
+// packFloor: alle Strategien rechnen (Säulen- und Lagen-Packer) und die
+// Variante mit den meisten geladenen Paketen nehmen.
+function packFloor(units){
+  const cands=[];
+  for(const former of [sameNumberColumns, mixedWidthColumns])
+    for(const packer of [planMixedLanes, planWidthGroups, planBalancedLanes])
+      cands.push(expandColumnPlan(packer(former(units))));
+  cands.push(planLayeredLanes(units));
+  let best=null;
+  for(const p of cands){ if(!best || p.placements.length>best.placements.length) best=p; }
   return best;
 }
 
@@ -709,51 +764,41 @@ function optimize(pkgs, opts={}){
   // packFloor kombiniert Säulen-Bildung (gleiche Nr. bzw. gemischt kürzer-
   // auf-länger) mit mehreren Reihen-Packern und nimmt die Variante mit den
   // meisten geladenen Paketen.
-  const plan = packFloor(units);
-  const shelves = plan.shelves;
-  const placed = [];
-  const notPlaced = plan.notPlaced;
-  for(const p of plan.placements){ p.s.x=p.x; p.s.y=p.y; placed.push(p.s); }
+  const plan = opts.manualPlan || packFloor(units);
+  const shelves = plan.shelves||[];
+  const notPlacedU = plan.notPlacedU || [];
 
   // --- Emission mit Gewicht/Volumen-Budget --------------------------------
   const boxes=[]; const underlays=[];
   let totW=0, totV=0, totNet=0; const loaded={};
-  let budgetHit=null;
+  let budgetHit=null; const dropped=[];
 
-  // Reihenfolge: hinten/links zuerst (stabile, nachvollziehbare Beladung)
-  placed.sort((a,b)=> a.x-b.x || a.y-b.y);
-
-  for(const s of placed){
-    let usedLayers=0, z=0;
-    for(let i=0;i<s.items.length;i++){
-      const it=s.items[i];
-      const grossVol = it.l*it.w*it.h/1e9;        // Umriss-Volumen (Raum)
-      const netVol   = it.m3>0 ? it.m3 : grossVol; // Netto-Holzvolumen (Gewicht)
-      const vol = grossVol;             // Raumbedarf für 90-m³-Grenze
-      const wt  = netVol*it.factor;     // Gewicht aus Netto-Holzvolumen
-      if(weightLimit && totW+wt > MAX_WEIGHT+1e-6){ budgetHit=budgetHit||'weight'; break; }
-      if(totV+vol > MAX_VOLUME+1e-6){ budgetHit=budgetHit||'volume'; break; }
-      totW+=wt; totV+=vol; totNet+=netVol;
-      const layerBase = z;                       // Unterkante Unterlagsholz
-      const zPkg = layerBase + UNDERLAY_H;        // Unterkante Paket
-      boxes.push({no:it.no,color:it.color,x:s.x,y:s.y,z:zPkg,l:it.l,w:it.w,h:it.h,layer:i,wt});
-      // 2 Unterlagshölzer (unter dem aktuellen Paket, an dessen Enden)
-      underlays.push({x:s.x,                   y:s.y, z:layerBase, len:UNDERLAY_LEN});
-      underlays.push({x:s.x+it.l-UNDERLAY_LEN, y:s.y, z:layerBase, len:UNDERLAY_LEN});
-      loaded[it.no]=(loaded[it.no]||0)+1;
-      z += UNDERLAY_H + it.h;
-      usedLayers++;
-    }
-    s.usedLayers=usedLayers;
-    if(usedLayers===0){ s.empty=true; }
+  // von unten nach oben, vorne zuerst – so bleibt beim Budget-Stopp nichts schweben
+  const seq = plan.placements.slice().sort((a,b)=> a.z-b.z || a.y-b.y || a.x-b.x);
+  let stop=false;
+  for(const pl of seq){
+    const it=pl.u;
+    if(stop){ dropped.push(it); continue; }
+    const grossVol = it.l*it.w*it.h/1e9;         // Umriss-Volumen (Raum)
+    const netVol   = it.m3>0 ? it.m3 : grossVol;  // Netto-Holzvolumen (Gewicht)
+    const wt  = netVol*it.factor;
+    if(weightLimit && totW+wt > MAX_WEIGHT+1e-6){ budgetHit=budgetHit||'weight'; stop=true; dropped.push(it); continue; }
+    if(totV+grossVol > MAX_VOLUME+1e-6){ budgetHit=budgetHit||'volume'; stop=true; dropped.push(it); continue; }
+    totW+=wt; totV+=grossVol; totNet+=netVol;
+    boxes.push({no:it.no,color:it.color,x:pl.x,y:pl.y,z:pl.z,l:it.l,w:it.w,h:it.h,layer:pl.layer||0,wt});
+    underlays.push({x:pl.x,                   y:pl.y, z:pl.z-UNDERLAY_H, len:UNDERLAY_LEN});
+    underlays.push({x:pl.x+it.l-UNDERLAY_LEN, y:pl.y, z:pl.z-UNDERLAY_H, len:UNDERLAY_LEN});
+    loaded[it.no]=(loaded[it.no]||0)+1;
   }
 
   // --- Kennzahlen ---------------------------------------------------------
   let usedLen=0, floorArea=0, maxLayerUsed=0;
   for(const sh of shelves) usedLen=Math.max(usedLen, sh.cursorX);
-  for(const s of placed){
-    if(s.usedLayers>0){ floorArea += s.l*s.w; maxLayerUsed=Math.max(maxLayerUsed,s.usedLayers); }
+  for(const b of boxes){
+    if(b.z <= UNDERLAY_H+1) floorArea += b.l*b.w;              // Basislage
+    maxLayerUsed=Math.max(maxLayerUsed, (b.layer||0)+1);
   }
+  if(!usedLen) for(const b of boxes) usedLen=Math.max(usedLen, b.x+b.l+GAP);
   const ldm = floorArea / TRUCK.W / 1000;  // Lademeter = genutzte Fläche(mm²)/Breite(mm) → m
 
   // --- Achslasten / Lastverteilung ----------------------------------------
@@ -838,14 +883,8 @@ function optimize(pkgs, opts={}){
   }
 
   // --- Gründe für nicht geladene Pakete -----------------------------------
-  // Säulen ohne Platz auf der Ladefläche
-  for(const s of notPlaced) for(const it of s.items) nl(it.no).space++;
-  // Platzierte Säulen, deren obere Pakete wegen Gewicht/Volumen entfielen
-  for(const s of placed){
-    for(let i=(s.usedLayers||0); i<s.items.length; i++){
-      if(budgetHit) nl(s.items[i].no)[budgetHit]++;
-    }
-  }
+  for(const u of notPlacedU) nl(u.no).space++;                 // kein Platz auf der Ladefläche
+  for(const u of dropped) if(budgetHit) nl(u.no)[budgetHit]++; // wegen Gewicht/Volumen entfallen
 
   // fehlende Pakete
   let totReq=0, totLoad=0;
@@ -858,7 +897,8 @@ function optimize(pkgs, opts={}){
     warnings.push(`Gewichtslimit deaktiviert: Beladung wiegt ${fmt(totW)} kg und überschreitet die 24 t – bitte gesondert prüfen (z. B. Achslasten).`);
 
   return {
-    boxes, underlays, placed, shelves,
+    boxes, underlays, shelves,
+    unplaced:[...notPlacedU, ...dropped],   // Pakete, die (noch) nicht geladen sind
     stats:{ totW, totV, totNet, ldm, usedLen, maxLayerUsed, floorArea,
             totReq, totLoad, requested, loaded, notLoaded, pkgInfo, weightLimit, axle },
     warnings
@@ -936,8 +976,8 @@ function renderTop(res){
   // Nur unterste Lage in Draufsicht (Grundflächen); gestapelte Lagen liegen darüber
   const base=res.boxes.filter(b=>b.layer===0);
   for(const b of base){
-    // Anzahl Lagen dieses Stapels ermitteln
-    const layersHere=res.boxes.filter(x=>x.x===b.x&&x.y===b.y).length;
+    // Anzahl Lagen über dieser Grundfläche (auch bei Brücken/Versatz)
+    const layersHere=res.boxes.filter(o=> o.y===b.y && o.x < b.x+b.l && o.x+o.l > b.x).length;
     s+=`<rect x="${X(b.x)}" y="${Y(b.y)}" width="${b.l}" height="${b.w}" rx="6"
          fill="${b.color}" fill-opacity="0.88" stroke="#0f172a" stroke-width="2.5"/>`;
     // Unterlagshölzer (2 Querhölzer) angedeutet

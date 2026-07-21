@@ -107,8 +107,11 @@ Gewicht = Volumen × Faktor (kg/m³)
    über die Ladebreite (kein Breitenverlust) und (c) ausgewogene Reihen
    (LPT: längster Stapel zuerst in die leerste Reihe – entspricht dem realen
    Beladen „lange Pakete hinter die Kabine, kurze dahinter" und füllt Reihen
-   gleichmäßig dicht). So wird die Paket-Mischung je nach Maßen automatisch
-   für maximale Beladung gewählt.
+   gleichmäßig dicht) und (d) ein **lagenweiser Packer**: Basislage füllen,
+   obere Lagen auf die tragende Länge darunter – ein Paket darf über
+   mehreren unteren liegen („Brücke"), verboten ist nur ein Überstand in
+   Längsrichtung. So wird die Anordnung je nach Maßen automatisch für
+   maximale Beladung gewählt.
 4. Emission Lage für Lage von unten nach oben unter Beachtung von
    Gewicht (24 t) und Volumen (90 m³).
 5. Längs-Optimierung der Lastverteilung: Die Reihen werden innerhalb ihres
