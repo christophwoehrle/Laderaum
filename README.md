@@ -76,6 +76,12 @@ Gewicht = Volumen × Faktor (kg/m³)
   zu groß für den Laderaum (inkl. überschrittenem Maß), kein Platz auf der
   Ladefläche, Maximalgewicht (24 t) oder Maximalvolumen (90 m³) erreicht.
 - Responsive **Seitenansicht** (mit Rädern) und **Draufsicht** (ohne Räder).
+- **Manuelle Anordnung** (Drag & Drop, Draufsicht): Pakete lassen sich frei
+  greifen und verschieben, in die **Ablage „neben dem LKW"** ziehen (entfernen)
+  und von dort wieder platzieren; ein Paket auf ein anderes ziehen stapelt es.
+  Die Länge bleibt immer fixiert (kein Drehen). Live-Anzeige von geladenen
+  Paketen, Gewicht, Sattel-/Achslast und Schwerpunkt sowie eine mitlaufende
+  Seitenansicht; „↺ Auto-Anordnung" stellt die automatische Beladung wieder her.
 - **Frei drehbare 3D-Simulation** der Beladung (eigenständiger Canvas-
   Renderer ohne Fremdbibliothek): Drehen per Maus/Touch, Zoomen per
   Scrollrad, Auto-Rotation und „Ansicht zurücksetzen".

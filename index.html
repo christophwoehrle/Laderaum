@@ -156,6 +156,23 @@
   .ax-diagram{margin-top:12px;width:100%;overflow:hidden}
   .c3d-hint{position:absolute;bottom:9px;left:12px;font-size:.74rem;color:#475569;
     background:rgba(255,255,255,.75);padding:3px 8px;border-radius:6px;pointer-events:none}
+  .ed-wrap{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fbfcfe}
+  .ed-floor{position:relative;width:100%;background:
+      linear-gradient(0deg,#eef4fb,#eef4fb);border-bottom:2px dashed #cbd5e1;touch-action:none}
+  .ed-floor .truck-frame{position:absolute;inset:0;border:2px solid #334155;pointer-events:none}
+  .ed-stage{position:relative;min-height:70px;padding:24px 8px 8px;background:#f1f5f9;touch-action:none}
+  .ed-stage-label{position:absolute;top:5px;left:10px;font-size:.72rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.03em}
+  .ed-pkg{position:absolute;box-sizing:border-box;border:1.5px solid rgba(15,23,42,.55);border-radius:5px;
+    color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;
+    text-align:center;overflow:hidden;cursor:grab;user-select:none;touch-action:none;
+    text-shadow:0 1px 2px rgba(0,0,0,.5);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .ed-pkg.dragging{cursor:grabbing;opacity:.9;box-shadow:0 6px 16px rgba(0,0,0,.35);z-index:999}
+  .ed-pkg .lay{position:absolute;top:1px;right:3px;font-size:9px;opacity:.9}
+  .ed-stage .ed-pkg{position:relative;display:inline-flex;margin:2px;height:34px;min-width:60px}
+  .ed-info{display:flex;flex-wrap:wrap;gap:14px;padding:10px 12px;border-top:1px solid var(--line);font-size:.82rem;background:#fff}
+  .ed-info b{font-variant-numeric:tabular-nums}
+  .ed-info .bad{color:var(--err);font-weight:700}
+  .ed-info .ok{color:var(--ok);font-weight:700}
   .res-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;
     margin:0 0 14px;padding-bottom:10px;border-bottom:2px solid var(--line)}
   .res-head .rh-title{font-size:1.05rem;font-weight:800}
@@ -785,7 +802,7 @@ function optimize(pkgs, opts={}){
     if(weightLimit && totW+wt > MAX_WEIGHT+1e-6){ budgetHit=budgetHit||'weight'; stop=true; dropped.push(it); continue; }
     if(totV+grossVol > MAX_VOLUME+1e-6){ budgetHit=budgetHit||'volume'; stop=true; dropped.push(it); continue; }
     totW+=wt; totV+=grossVol; totNet+=netVol;
-    boxes.push({no:it.no,color:it.color,x:pl.x,y:pl.y,z:pl.z,l:it.l,w:it.w,h:it.h,layer:pl.layer||0,wt});
+    boxes.push({no:it.no,color:it.color,x:pl.x,y:pl.y,z:pl.z,l:it.l,w:it.w,h:it.h,layer:pl.layer||0,wt,factor:it.factor,m3:it.m3||0});
     underlays.push({x:pl.x,                   y:pl.y, z:pl.z-UNDERLAY_H, len:UNDERLAY_LEN});
     underlays.push({x:pl.x+it.l-UNDERLAY_LEN, y:pl.y, z:pl.z-UNDERLAY_H, len:UNDERLAY_LEN});
     loaded[it.no]=(loaded[it.no]||0)+1;
@@ -1175,6 +1192,147 @@ function setup3D(res){
 }
 
 /* =========================================================================
+   Manuelle Anordnung (Drag & Drop, Draufsicht) + Ablage neben dem LKW
+   ========================================================================= */
+let _ed = { items:[] };
+function edVehicle(){
+  const v=id=>{ const el=document.getElementById(id); const n=el?+el.value:0; return isFinite(n)?n:0; };
+  return { xKP:v('axKP')||1600, xAX:v('axAX')||9300, maxKP:v('axMaxKP')||12000,
+           maxAX:v('axMaxAX')||24000, leerKP:v('axLeerKP'), leerAX:v('axLeerAX'), minKP:v('axMinKP') };
+}
+function edWeight(it){ const gv=it.l*it.w*it.h/1e9; return (it.m3>0?it.m3:gv)*it.factor; }
+function edOverlap(a,b){ return a.x < b.x+b.l-1 && a.x+a.l > b.x+1 && a.y < b.y+b.w-1 && a.y+a.w > b.y+1; }
+
+function setupEditor(res){
+  const floor=document.getElementById('edFloor'); if(!floor) return;
+  // Zustand aus dem aktuellen Ergebnis aufbauen
+  const items=[];
+  for(const b of res.boxes) items.push({no:b.no,color:b.color,l:b.l,w:b.w,h:b.h,m3:b.m3||0,factor:b.factor||0,placed:true,x:b.x,y:b.y,z:b.z,layer:b.layer||0});
+  for(const u of (res.unplaced||[])) items.push({no:u.no,color:u.color,l:u.l,w:u.w,h:u.h,m3:u.m3||0,factor:u.factor||0,placed:false,x:0,y:0,z:UNDERLAY_H,layer:0});
+  _ed.items=items;
+  drawEditor();
+  document.getElementById('edReset').addEventListener('click', ()=>{ setupEditor(res); });
+}
+
+function stackZ(item){
+  const others=_ed.items.filter(o=>o!==item && o.placed && edOverlap(item,o));
+  if(others.length){
+    const parent=others.reduce((a,b)=> (b.z+b.h)>(a.z+a.h)?b:a);
+    const z=parent.z+parent.h+UNDERLAY_H;
+    if(z+item.h<=TRUCK.H+1){ item.z=z; item.layer=parent.layer+1; return; }
+  }
+  item.z=UNDERLAY_H; item.layer=0;
+}
+
+function drawEditor(){
+  const wrap=document.querySelector('.ed-wrap'); const floor=document.getElementById('edFloor');
+  const stage=document.getElementById('edStage'); if(!floor||!stage) return;
+  const W=floor.clientWidth || wrap.clientWidth || 800;
+  const M=60;                                   // Rand in mm
+  const scale=W/(TRUCK.L+2*M);
+  floor.style.height=((TRUCK.W+2*M)*scale)+'px';
+  const frame=floor.querySelector('.truck-frame');
+  frame.style.left=(M*scale)+'px'; frame.style.top=(M*scale)+'px';
+  frame.style.width=(TRUCK.L*scale)+'px'; frame.style.height=(TRUCK.W*scale)+'px';
+  // vorhandene Pakete entfernen
+  floor.querySelectorAll('.ed-pkg').forEach(e=>e.remove());
+  stage.querySelectorAll('.ed-pkg').forEach(e=>e.remove());
+
+  _ed.items.forEach((it,idx)=>{
+    const d=document.createElement('div'); d.className='ed-pkg'; d.dataset.idx=idx;
+    d.style.background=it.color;
+    d.title=`${it.no}  ${it.l}×${it.w}×${it.h} mm`;
+    d.innerHTML=`${esc(it.no)}${it.placed&&it.layer>0?`<span class="lay">L${it.layer+1}</span>`:''}`;
+    if(it.placed){
+      d.style.left=((M+it.x)*scale)+'px'; d.style.top=((M+it.y)*scale)+'px';
+      d.style.width=(it.l*scale)+'px'; d.style.height=(it.w*scale)+'px';
+      d.style.zIndex=10+it.layer;
+      floor.appendChild(d);
+    } else {
+      // Ablage: feste kompakte Kacheln (Länge angedeutet)
+      d.style.width=Math.max(60,Math.min(160,it.l*scale))+'px';
+      stage.appendChild(d);
+    }
+    d.addEventListener('pointerdown', e=>startDrag(e,idx));
+  });
+  updateEdInfo();
+}
+
+let _drag=null;
+function startDrag(e, idx){
+  e.preventDefault();
+  const it=_ed.items[idx]; const el=e.currentTarget;
+  const r=el.getBoundingClientRect();
+  _drag={ idx, el, dx:e.clientX-r.left, dy:e.clientY-r.top, w:r.width, h:r.height, moved:false };
+  el.setPointerCapture(e.pointerId);
+  el.classList.add('dragging');
+  // auf feste Positionierung umstellen, damit es dem Cursor über Boden/Ablage folgt
+  el.style.position='fixed'; el.style.left=r.left+'px'; el.style.top=r.top+'px';
+  el.style.width=r.width+'px'; el.style.height=r.height+'px'; el.style.margin='0';
+  window.addEventListener('pointermove', onDrag);
+  window.addEventListener('pointerup', endDrag);
+}
+function onDrag(e){
+  if(!_drag) return; _drag.moved=true;
+  _drag.el.style.left=(e.clientX-_drag.dx)+'px';
+  _drag.el.style.top=(e.clientY-_drag.dy)+'px';
+}
+function endDrag(e){
+  if(!_drag) return;
+  window.removeEventListener('pointermove', onDrag);
+  window.removeEventListener('pointerup', endDrag);
+  const it=_ed.items[_drag.idx];
+  const floor=document.getElementById('edFloor'), stage=document.getElementById('edStage');
+  const fr=floor.getBoundingClientRect(), sr=stage.getBoundingClientRect();
+  const cx=e.clientX, cy=e.clientY;
+  const M=60, W=floor.clientWidth, scale=W/(TRUCK.L+2*M);
+  console.log('EDBG endDrag',JSON.stringify({cx:cx|0,cy:cy|0,moved:_drag.moved,inF:(cx>=fr.left&&cx<=fr.right&&cy>=fr.top&&cy<=fr.bottom),inS:(cx>=sr.left&&cx<=sr.right&&cy>=sr.top&&cy<=sr.bottom)}));
+  if(cx>=sr.left && cx<=sr.right && cy>=sr.top && cy<=sr.bottom){
+    it.placed=false;                                  // in die Ablage gelegt
+  } else if(cx>=fr.left && cx<=fr.right && cy>=fr.top && cy<=fr.bottom){
+    // Position aus Drop-Punkt (obere-linke Ecke des Pakets)
+    let x=(cx-_drag.dx-fr.left)/scale - M;
+    let y=(cy-_drag.dy-fr.top)/scale - M;
+    x=Math.max(0, Math.min(TRUCK.L-it.l, x));
+    y=Math.max(0, Math.min(TRUCK.W-it.w, y));
+    it.x=x; it.y=y; it.placed=true; stackZ(it);
+  } // sonst: unverändert
+  _drag=null;
+  drawEditor();
+}
+
+function updateEdInfo(){
+  const info=document.getElementById('edInfo'); if(!info) return;
+  const placed=_ed.items.filter(i=>i.placed);
+  const total=_ed.items.length;
+  let P=0, mom=0, over=false;
+  for(const i of placed){ const w=edWeight(i); P+=w; mom+=w*(i.x+i.l/2); }
+  // Überlappungs-/Überstand-Check (Info)
+  const veh=edVehicle();
+  let axStr='—';
+  if(P>1e-6){
+    const span=Math.max(1,veh.xAX-veh.xKP), cog=mom/P;
+    const rAx=P*(cog-veh.xKP)/span + veh.leerAX;
+    const rKp=(P - P*(cog-veh.xKP)/span) + veh.leerKP;
+    const okA=rAx<=veh.maxAX, okK=rKp<=veh.maxKP && (veh.minKP<=0||rKp>=veh.minKP);
+    axStr=`Sattellast <b class="${okK?'ok':'bad'}">${fmt(rKp)} kg</b> · Achslast <b class="${okA?'ok':'bad'}">${fmt(rAx)} kg</b> · Schwerpunkt <b>${fmt(cog/1000,2)} m</b>`;
+  }
+  // Höhen-Überschreitung?
+  const tooHigh=placed.some(i=> i.z+i.h>TRUCK.H+1);
+  info.innerHTML=`<span>Geladen <b>${placed.length} / ${total}</b></span>`+
+    `<span>Gewicht <b>${fmt(P)} kg</b>${P>MAX_WEIGHT?` <b class="bad">&gt; 24 t!</b>`:''}</span>`+
+    `<span>${axStr}</span>`+
+    (tooHigh?`<span class="bad">Höhe über 2,80 m!</span>`:'');
+  // Live-Seitenansicht aktualisieren
+  const side=document.getElementById('edSide');
+  if(side){
+    const pseudo={boxes:placed.map(i=>({no:i.no,color:i.color,x:i.x,y:i.y,z:i.z,l:i.l,w:i.w,h:i.h})), underlays:[]};
+    for(const i of placed) pseudo.underlays.push({x:i.x,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN},{x:i.x+i.l-UNDERLAY_LEN,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN});
+    side.innerHTML=renderSide(pseudo);
+  }
+}
+
+/* =========================================================================
    Ergebnis rendern
    ========================================================================= */
 function bar(pct,cls){ return `<div class="bar ${cls}"><i style="width:${Math.min(100,pct)}%"></i></div>`; }
@@ -1327,6 +1485,16 @@ function render(res){
       <div class="c3d-hint">Ziehen zum Drehen · Scrollen zum Zoomen</div>
     </div>`;
 
+    html+=`<div class="view-title no-print" style="margin-top:16px"><span>✋ Manuelle Anordnung <small>(Draufsicht – ziehen zum Verschieben; in die Ablage ziehen zum Entfernen; auf ein Paket ziehen = stapeln; Länge bleibt fix)</small></span>
+      <button class="btn btn-ghost no-print" id="edReset" type="button">↺ Auto-Anordnung</button></div>
+    <div class="ed-wrap no-print">
+      <div class="ed-floor" id="edFloor"><div class="truck-frame"></div></div>
+      <div class="ed-stage" id="edStage"><div class="ed-stage-label">Neben dem LKW (nicht geladen)</div></div>
+      <div class="ed-info" id="edInfo"></div>
+    </div>
+    <div class="view-title" style="margin-top:12px"><span>Seitenansicht (aktuelle Anordnung)</span></div>
+    <div class="svg-box" id="edSide"></div>`;
+
     // Legende
     html+='<div class="legend">';
     const seen={};
@@ -1345,7 +1513,7 @@ function render(res){
   }
 
   document.getElementById('results').innerHTML=html;
-  if(res.boxes.length) setup3D(res);
+  if(res.boxes.length){ setup3D(res); setupEditor(res); }
 }
 
 /* =========================================================================
