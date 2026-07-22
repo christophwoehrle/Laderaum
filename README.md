@@ -58,8 +58,13 @@ Gewicht = Volumen × Faktor (kg/m³)
 - Auftragsnummer und Datum (Kalender, ab tagesaktuellem Datum).
 - Pakettabelle: Paketnr., L × B × H (mm), Anzahl, Kategorie – jede
   Paketnummer erhält eine durchgehend eindeutige Farbe.
-- **Import aus PDF** (best effort): erkennt Zeilen mit Maßangaben
-  (L × B × H) und optionaler Stückzahl sowie Auftragsnummer/Datum.
+- **Import aus PDF** (best effort): erkennt das Sägewerks-/AV-Listen-Format
+  (Brett B×H, Länge, Bretter breit×hoch, Zwischenlatten S18, m³ netto) und
+  erzeugt daraus je Position ein Paket (Länge; Breite = breit×Brett-H;
+  Höhe = hoch×Brett-B + Latten; m³ netto) inkl. AV-Listen-Nr. als
+  Auftragsnummer. Fällt sonst auf ein generisches L×B×H-Format zurück.
+  (Nur in der Standalone-`index.html`/auf der gehosteten Seite – im Artifact
+  ist pdf.js aus Sicherheitsgründen deaktiviert.)
 - **Auftrag speichern / laden**: Eingaben werden automatisch im Browser
   gespeichert (überstehen einen Reload) und lassen sich als JSON-Datei
   exportieren bzw. wieder importieren (Archiv/Weitergabe).
