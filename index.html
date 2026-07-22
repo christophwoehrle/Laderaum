@@ -688,46 +688,50 @@ function expandColumnPlan(cp){
 // Strategie D: lagenweise Reihen mit Auflage über die Länge (Brücken erlaubt).
 // Basislage füllen, obere Lagen auf die tragende Länge darunter – ein Paket
 // darf über mehreren unteren liegen (nur „kein Überstand in Längsrichtung").
+// Best-Fit über alle Reihen/Lagen; ein etwas höheres Paket darf eine Lage
+// mitheben, solange die Reihe insgesamt ≤ 2,80 m bleibt.
+function _laneHeight(lane){ let h=0; for(const L of lane.layers) h+=UNDERLAY_H+L.maxH; return h; }
 function planLayeredLanes(units){
   if(!units.length) return {placements:[], notPlacedU:[], shelves:[]};
   const maxFW=Math.max(...units.map(u=>u.footW));
   const N=Math.max(1, Math.floor((TRUCK.W+0.01)/maxFW));
-  const lanes=[]; for(let i=0;i<N;i++) lanes.push({y:i*maxFW, layers:[], height:0});
+  const lanes=[]; for(let i=0;i<N;i++) lanes.push({y:i*maxFW, layers:[]});
   const rem=units.slice().sort((a,b)=> b.footL-a.footL || b.h-a.h);
   const notPlacedU=[];
   for(const u of rem){
-    let done=false;
-    // 1) in eine bestehende Lage einfügen (längs tragend, nicht höher als Lage)
+    let best=null;
     for(const lane of lanes){
+      // bestehende Lagen
       for(let li=0; li<lane.layers.length; li++){
-        const support = li===0 ? TRUCK.L : lane.layers[li-1].length;
         const layer=lane.layers[li];
-        if(u.h<=layer.maxH+1e-6 && layer.length+u.footL <= support+0.01){
-          layer.packages.push({u,x:layer.length}); layer.length+=u.footL; done=true; break;
+        const support = li===0 ? TRUCK.L : lane.layers[li-1].length;
+        if(layer.length+u.footL <= support+0.01){
+          const old=layer.maxH; layer.maxH=Math.max(old,u.h);
+          const ok=_laneHeight(lane)<=TRUCK.H+1e-6; layer.maxH=old;
+          if(ok){ const lo=support-(layer.length+u.footL); if(!best||lo<best.lo) best={lane,li,lo,isNew:false}; }
         }
       }
-      if(done) break;
-    }
-    if(done) continue;
-    // 2) neue oberste Lage (Höhe/Lagenlimit/Auflage prüfen)
-    for(const lane of lanes){
+      // neue oberste Lage (bestehende werden per Bonus bevorzugt)
       const li=lane.layers.length;
       const support = li===0 ? TRUCK.L : lane.layers[li-1].length;
       const cnt=li+1;
       const allLow = u.h<=LOW_H && lane.layers.every(L=>L.maxH<=LOW_H);
-      if(allLow && cnt>MAX_LAYERS_LOW) continue;
-      if(lane.height + UNDERLAY_H + u.h > TRUCK.H+1e-6) continue;
-      if(u.footL <= support+0.01){
-        lane.layers.push({packages:[{u,x:0}], length:u.footL, maxH:u.h, zBase:lane.height});
-        lane.height += UNDERLAY_H+u.h; done=true; break;
+      const fitsCnt = !(allLow && cnt>MAX_LAYERS_LOW);
+      const fitsH = _laneHeight(lane)+UNDERLAY_H+u.h <= TRUCK.H+1e-6;
+      if(fitsCnt && fitsH && u.footL <= support+0.01){
+        const lo=(support-u.footL)+1e6; if(!best||lo<best.lo) best={lane,li,lo,isNew:true};
       }
     }
-    if(!done) notPlacedU.push(u);
+    if(!best){ notPlacedU.push(u); continue; }
+    const lane=best.lane;
+    if(best.isNew) lane.layers.push({packages:[{u,x:0}], length:u.footL, maxH:u.h});
+    else { const L=lane.layers[best.li]; L.packages.push({u,x:L.length}); L.length+=u.footL; L.maxH=Math.max(L.maxH,u.h); }
   }
   const placements=[]; const shelves=[];
   for(const lane of lanes){
     if(!lane.layers.length) continue;
-    lane.layers.forEach((layer,li)=>{ for(const pk of layer.packages) placements.push({u:pk.u, x:pk.x, y:lane.y, z:layer.zBase+UNDERLAY_H, layer:li}); });
+    let z=0;
+    lane.layers.forEach((layer,li)=>{ for(const pk of layer.packages) placements.push({u:pk.u, x:pk.x, y:lane.y, z:z+UNDERLAY_H, layer:li}); z+=UNDERLAY_H+layer.maxH; });
     shelves.push({y:lane.y, width:maxFW, cursorX:lane.layers[0].length});
   }
   return {placements, notPlacedU, shelves};
