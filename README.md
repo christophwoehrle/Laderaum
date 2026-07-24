@@ -110,8 +110,10 @@ Gewicht = Volumen × Faktor (kg/m³)
 - **Lastverteilung / Achslasten** (Lastverteilungsplan): Nutzlast wird nach
   dem Hebelgesetz auf Königszapfen (Sattellast) und Achsaggregat (Achslast)
   verteilt; Lastschwerpunkt, zulässiger Schwerpunktbereich und Ampelstatus
-  werden angezeigt. Die Reihen werden längs automatisch so verschoben, dass
-  der Schwerpunkt möglichst im zulässigen Fenster liegt. Fahrzeugdaten
+  werden angezeigt. Die Beladung beginnt **immer bündig an der vorderen
+  Ladewand** (Stirnwand) – so entsteht vorne kein Leerraum; nur wenn dadurch
+  die zulässige Sattellast überschritten würde, werden die Reihen so wenig
+  wie nötig nach hinten verschoben. Fahrzeugdaten
   (Königszapfen-/Achsposition, max. Sattel-/Achslast) sind einstellbar.
   Optional kann das **Eigengewicht (Tara)** als Grundlast auf Königszapfen
   und Achsaggregat angegeben werden – es wird zur Nutzlast addiert, sodass
@@ -142,7 +144,11 @@ Gewicht = Volumen × Faktor (kg/m³)
    maximale Beladung gewählt.
 4. Emission Lage für Lage von unten nach oben unter Beachtung von
    Gewicht (24 t) und Volumen (90 m³).
-5. Längs-Optimierung der Lastverteilung: Die Reihen werden innerhalb ihres
-   freien Spielraums verschoben, bis der Lastschwerpunkt im zulässigen
-   Fenster liegt (Achslasten nach Hebelgesetz). Reicht das nicht aus, wird
-   gewarnt (Ladung reduzieren bzw. anders verteilen).
+5. Beladung immer bündig an der vorderen Ladewand (Stirnwand) beginnen –
+   jede Reihe startet vorne, es entsteht vorne kein Leerraum. Der
+   Lastschwerpunkt bleibt damit so weit vorne wie möglich; nur wenn die
+   zulässige Sattellast (Königszapfen) dadurch überschritten würde, werden
+   die Reihen innerhalb ihres freien (hinteren) Spielraums so wenig wie
+   nötig nach hinten verschoben. Reicht auch das nicht aus, wird gewarnt.
+6. Reicht ein LKW nicht aus, wird automatisch ein weiterer befüllt (siehe
+   „Mehrere LKW automatisch").

@@ -292,7 +292,7 @@
         <div><label for="axLeerAX">Eigengewicht auf Achsaggregat (kg)</label><input id="axLeerAX" type="number" min="0" step="100" value="0"></div>
         <div><label for="axMinKP">min. Sattellast (kg)</label><input id="axMinKP" type="number" min="0" step="100" value="0"></div>
       </div>
-      <p class="hint" style="margin-top:8px">Typische Werte für einen 3-Achs-Sattelauflieger – bitte an das reale Fahrzeug anpassen. Berechnet wird die Verteilung nach dem Hebelgesetz zwischen Königszapfen und Achsaggregat. Optional lässt sich das <b>Eigengewicht (Tara)</b> als Grundlast auf Königszapfen bzw. Achsaggregat angeben – es wird dann zur Nutzlast addiert, sodass die Grenzwerte gegen die Gesamtlast geprüft werden (0 = nur Nutzlast). Über die <b>min. Sattellast</b> lässt sich zusätzlich eine Untergrenze für den Königszapfen festlegen (Traktion/Lenkstabilität) – sie begrenzt den Schwerpunkt nach hinten. Die Reihen werden längs so verschoben, dass der Lastschwerpunkt möglichst im zulässigen Bereich liegt.</p>
+      <p class="hint" style="margin-top:8px">Typische Werte für einen 3-Achs-Sattelauflieger – bitte an das reale Fahrzeug anpassen. Berechnet wird die Verteilung nach dem Hebelgesetz zwischen Königszapfen und Achsaggregat. Optional lässt sich das <b>Eigengewicht (Tara)</b> als Grundlast auf Königszapfen bzw. Achsaggregat angeben – es wird dann zur Nutzlast addiert, sodass die Grenzwerte gegen die Gesamtlast geprüft werden (0 = nur Nutzlast). Über die <b>min. Sattellast</b> lässt sich zusätzlich eine Untergrenze für den Königszapfen festlegen (Traktion/Lenkstabilität) – sie begrenzt den Schwerpunkt nach hinten. Die Beladung beginnt immer bündig an der vorderen Ladewand (kein Leerraum vorne); nur falls die zulässige Sattellast überschritten würde, wird so wenig wie nötig nach hinten verschoben.</p>
     </details>
 
     <details class="hlp">
@@ -895,9 +895,12 @@ function optimize(pkgs, opts={}){
     const feasible  = cogMinRaw <= cogMaxRaw;         // Nutzlast überhaupt verteilbar?
     const cogMin = Math.max(0, cogMinRaw);
     const cogMax = Math.min(TRUCK.L, cogMaxRaw);
-    // Zielschwerpunkt: Mitte des zulässigen Fensters, erreichbar begrenzt
-    const winMid = feasible ? (cogMin + cogMax) / 2 : (cogMinRaw + cogMaxRaw) / 2;
-    const target = Math.min(cogRear, Math.max(cogFront, winMid));
+    // Beladung beginnt IMMER bündig an der vorderen Ladewand (Stirnwand) –
+    // so entsteht vorne kein Leerraum. Der Schwerpunkt bleibt daher so weit
+    // vorne wie möglich (cogFront). Nur wenn die Sattellast dadurch das
+    // zulässige Maximum überschreiten würde (Schwerpunkt zu weit vorne,
+    // cogFront < cogMin), wird so wenig wie nötig nach hinten verschoben.
+    const target = Math.min(cogRear, Math.max(cogFront, cogMin));
     const f = cogRear>cogFront+1e-6 ? Math.min(1, Math.max(0, (target-cogFront)/(cogRear-cogFront))) : 0;
     // Längsverschiebung anwenden (Boxen + Unterlagshölzer je Reihe)
     const shiftOf = {};
@@ -1459,7 +1462,7 @@ function renderAxle(ax){
   const stat=ok=> ok? `<span class="ax-status ok">✓ i.O.</span>` : `<span class="ax-status bad">✗ überschritten</span>`;
   const tare = (ax.leerKing>0 || ax.leerAxle>0);
   let h=`<div class="ax-panel"><h3>⚖️ Lastverteilung / Achslasten</h3>`;
-  h+=`<p class="axsub">Verteilung nach Hebelgesetz${tare?' inkl. Eigengewicht (Tara)':' (nur Nutzlast, ohne Eigengewicht)'}. Reihen wurden längs für eine zulässige Verteilung optimiert.</p>`;
+  h+=`<p class="axsub">Verteilung nach Hebelgesetz${tare?' inkl. Eigengewicht (Tara)':' (nur Nutzlast, ohne Eigengewicht)'}. Beladung beginnt bündig an der vorderen Ladewand (kein Leerraum vorne); nur bei Überschreitung der Sattellast wird minimal nach hinten verschoben.</p>`;
   h+=`<div class="ax-grid">`;
   const minTxt = ax.minKing>0 ? ` · min. ${fmt(ax.minKing)} kg` : '';
   const kSub = (tare ? `von ${fmt(ax.maxKing)} kg · Nutzlast ${fmt(ax.rKingPay)} + Tara ${fmt(ax.leerKing)} kg` : `von ${fmt(ax.maxKing)} kg`) + minTxt;
