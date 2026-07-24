@@ -136,8 +136,8 @@
   .rtag.volume{background:#dcfce7;color:#166534}
   .c3d-wrap{position:relative;width:100%;border:1px solid var(--line);border-radius:10px;
     background:linear-gradient(180deg,#eef4fb 0%,#e2eaf3 100%);overflow:hidden}
-  #c3d{display:block;width:100%;height:auto;touch-action:none;cursor:grab}
-  #c3d:active{cursor:grabbing}
+  .c3d{display:block;width:100%;height:auto;touch-action:none;cursor:grab}
+  .c3d:active{cursor:grabbing}
   .c3d-ctrl{position:absolute;top:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
   .c3d-ctrl button{font:600 .76rem/1 inherit;padding:7px 10px;border:1px solid var(--line);
     border-radius:8px;background:rgba(255,255,255,.9);color:var(--ink);cursor:pointer;backdrop-filter:blur(2px)}
@@ -178,6 +178,22 @@
   .res-head .rh-title{font-size:1.05rem;font-weight:800}
   .res-head .rh-meta{font-size:.83rem;color:var(--muted);margin-top:2px}
   .res-head .rh-meta b{color:var(--ink);font-weight:700}
+  /* Mehrere LKW nebeneinander */
+  .trucks-row{display:flex;gap:18px;overflow-x:auto;padding:4px 2px 12px;align-items:flex-start;
+    scroll-snap-type:x proximity}
+  .truck-card{flex:0 0 auto;width:min(720px,92vw);scroll-snap-align:start;
+    border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel-2)}
+  .truck-card > .tc-head{display:flex;align-items:center;gap:10px;margin:0 0 12px;
+    padding-bottom:10px;border-bottom:1px solid var(--line)}
+  .truck-badge{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 12px;
+    border-radius:10px;background:var(--accent);color:#fff;font-weight:800;font-size:.95rem;white-space:nowrap;
+    box-shadow:0 1px 3px rgba(37,99,235,.4)}
+  .truck-card .tc-title{font-weight:800;font-size:.98rem}
+  .truck-card .tc-sub{font-size:.77rem;color:var(--muted);margin-top:1px}
+  .trucks-count{display:inline-flex;align-items:center;gap:7px;font-size:.8rem;font-weight:700;
+    padding:5px 11px;border-radius:99px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe}
+  .truck-card .stats{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
+  .truck-card .view-title{margin-top:14px}
   @media (max-width:640px){
     body{padding:10px}
     .panel{padding:14px}
@@ -195,6 +211,9 @@
     .view-title{break-after:avoid}
     .stat,.ax-panel,.nl-panel,.svg-box,.ax-cell{break-inside:avoid}
     .msg{border:1px solid #bbb}
+    /* Im Druck LKW untereinander statt nebeneinander */
+    .trucks-row{display:block;overflow:visible}
+    .truck-card{width:auto;break-inside:avoid;page-break-inside:avoid;margin-bottom:16px}
   }
 </style>
 </head>
@@ -778,7 +797,7 @@ function optimize(pkgs, opts={}){
       continue;
     }
     for(let k=0;k<p.n;k++) units.push({
-      no:p.no, color:p.color, factor:p.factor, l:p.l, w:p.w, h:p.h, m3:p.m3||0,
+      no:p.no, color:p.color, factor:p.factor, cat:p.cat, l:p.l, w:p.w, h:p.h, m3:p.m3||0,
       footL:p.l+GAP, footW:p.w+GAP
     });
   }
@@ -929,6 +948,61 @@ function optimize(pkgs, opts={}){
 }
 
 /* =========================================================================
+   Mehrere LKW: reicht ein Sattelzug nicht aus, wird automatisch ein
+   weiterer (2., 3., … x.) befüllt, bis alle passenden Pakete verladen sind.
+   Jeder LKW wird für sich optimal gepackt (Gewicht/Volumen/Achslast gelten
+   je Fahrzeug); die restlichen Pakete wandern auf den nächsten LKW.
+   ========================================================================= */
+function unitsToPkgs(units){
+  const map=new Map();
+  for(const u of units){
+    const key=[u.no,u.l,u.w,u.h,u.m3||0,u.cat].join('|');
+    let p=map.get(key);
+    if(!p){ p={no:u.no,l:u.l,w:u.w,h:u.h,m3:u.m3||0,factor:u.factor,color:u.color,cat:u.cat,n:0}; map.set(key,p); }
+    p.n++;
+  }
+  return [...map.values()];
+}
+
+function optimizeMulti(list, opts={}){
+  const trucks=[];
+  let remaining=list.slice();
+  let guard=0;
+  while(remaining.length && guard++<60){
+    const res=optimize(remaining, opts);
+    trucks.push(res);
+    if(res.boxes.length===0){ res._stuck=true; break; }   // nichts platzierbar -> Abbruch
+    const leftover=unitsToPkgs(res.unplaced);
+    if(!leftover.length) break;                            // alles verladen
+    remaining=leftover;
+  }
+  return trucks;
+}
+
+// Aggregierte Kennzahlen über alle LKW (für Kopfzeile + Sammel-Aufstellung)
+function aggregate(trucks){
+  const first=trucks[0].stats;
+  let totLoad=0, totW=0, totV=0, totNet=0;
+  for(const t of trucks){ totLoad+=t.stats.totLoad; totW+=t.stats.totW; totV+=t.stats.totV; totNet+=t.stats.totNet; }
+  // Endgültig nicht geladene Pakete: nur „zu groß" (dauerhaft) + evtl. Rest
+  // des letzten LKW, falls die Beladung dort abgebrochen wurde.
+  const notLoaded={};
+  const ensure=no=>(notLoaded[no]||(notLoaded[no]={space:0,weight:0,volume:0,oversize:0,oversizeReason:''}));
+  for(const no in first.notLoaded){
+    const d=first.notLoaded[no];
+    if(d.oversize>0){ const e=ensure(no); e.oversize+=d.oversize; e.oversizeReason=d.oversizeReason; }
+  }
+  const last=trucks[trucks.length-1];
+  if(last._stuck){
+    for(const no in last.stats.notLoaded){
+      const d=last.stats.notLoaded[no], e=ensure(no);
+      e.space+=d.space; e.weight+=d.weight; e.volume+=d.volume;
+    }
+  }
+  return { totReq:first.totReq, totLoad, totW, totV, totNet, notLoaded, pkgInfo:first.pkgInfo };
+}
+
+/* =========================================================================
    Visualisierung (SVG)
    ========================================================================= */
 function fmt(n,d=0){ return n.toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d}); }
@@ -1022,7 +1096,11 @@ function renderTop(res){
    3D-Simulation (eigenständiger Canvas-Renderer, keine Fremdbibliothek)
    Perspektivische Projektion + Painter-Algorithmus, frei drehbar.
    ========================================================================= */
-let _3d = { raf:0, resize:null };
+let _3dList = [];   // aktive 3D-Instanzen (eine je LKW)
+function teardown3D(){
+  for(const i of _3dList){ if(i.raf) cancelAnimationFrame(i.raf); if(i.resize) window.removeEventListener('resize', i.resize); }
+  _3dList=[];
+}
 
 function shade(hex, f){
   const n = parseInt(hex.slice(1),16);
@@ -1049,12 +1127,11 @@ function boxFaces(x,y,z,l,w,h,color){
   return F.map(f=>({ pts:f.i.map(k=>c[k]), fill:shade(color,f.s) }));
 }
 
-function setup3D(res){
-  const cv = document.getElementById('c3d');
+function setup3D(res, cv){
   if(!cv) return;
   const ctx = cv.getContext('2d');
-  if(_3d.raf) cancelAnimationFrame(_3d.raf);
-  if(_3d.resize) window.removeEventListener('resize', _3d.resize);
+  const inst = { raf:0, resize:null };
+  _3dList.push(inst);
 
   // --- Szene aufbauen (zentriert um Laderaum-Mitte) ---
   const CX=TRUCK.L/2, CY=TRUCK.W/2, CZ=TRUCK.H/2;
@@ -1181,18 +1258,19 @@ function setup3D(res){
     draw();
   }, {passive:false});
 
-  const rotBtn=document.getElementById('c3dRot');
-  const resetBtn=document.getElementById('c3dReset');
-  function autoOff(){ if(_3d.raf){ cancelAnimationFrame(_3d.raf); _3d.raf=0; rotBtn.classList.remove('on'); } }
-  rotBtn.addEventListener('click', ()=>{
-    if(_3d.raf){ autoOff(); return; }
+  const wrap=cv.closest('.c3d-wrap') || document;
+  const rotBtn=wrap.querySelector('.c3d-rot');
+  const resetBtn=wrap.querySelector('.c3d-reset');
+  function autoOff(){ if(inst.raf){ cancelAnimationFrame(inst.raf); inst.raf=0; if(rotBtn) rotBtn.classList.remove('on'); } }
+  if(rotBtn) rotBtn.addEventListener('click', ()=>{
+    if(inst.raf){ autoOff(); return; }
     rotBtn.classList.add('on');
-    const step=()=>{ st.yaw+=0.006; draw(); _3d.raf=requestAnimationFrame(step); };
-    _3d.raf=requestAnimationFrame(step);
+    const step=()=>{ st.yaw+=0.006; draw(); inst.raf=requestAnimationFrame(step); };
+    inst.raf=requestAnimationFrame(step);
   });
-  resetBtn.addEventListener('click', ()=>{ autoOff(); st.yaw=DEF.yaw; st.pitch=DEF.pitch; st.zoom=DEF.zoom; draw(); });
+  if(resetBtn) resetBtn.addEventListener('click', ()=>{ autoOff(); st.yaw=DEF.yaw; st.pitch=DEF.pitch; st.zoom=DEF.zoom; draw(); });
 
-  _3d.resize=resize;
+  inst.resize=resize;
   window.addEventListener('resize', resize);
   resize();
 }
@@ -1200,7 +1278,6 @@ function setup3D(res){
 /* =========================================================================
    Manuelle Anordnung (Drag & Drop, Draufsicht) + Ablage neben dem LKW
    ========================================================================= */
-let _ed = { items:[] };
 function edVehicle(){
   const v=id=>{ const el=document.getElementById(id); const n=el?+el.value:0; return isFinite(n)?n:0; };
   return { xKP:v('axKP')||1600, xAX:v('axAX')||9300, maxKP:v('axMaxKP')||12000,
@@ -1209,70 +1286,105 @@ function edVehicle(){
 function edWeight(it){ const gv=it.l*it.w*it.h/1e9; return (it.m3>0?it.m3:gv)*it.factor; }
 function edOverlap(a,b){ return a.x < b.x+b.l-1 && a.x+a.l > b.x+1 && a.y < b.y+b.w-1 && a.y+a.w > b.y+1; }
 
-function setupEditor(res){
-  const floor=document.getElementById('edFloor'); if(!floor) return;
-  // Zustand aus dem aktuellen Ergebnis aufbauen
-  const items=[];
-  for(const b of res.boxes) items.push({no:b.no,color:b.color,l:b.l,w:b.w,h:b.h,m3:b.m3||0,factor:b.factor||0,placed:true,x:b.x,y:b.y,z:b.z,layer:b.layer||0});
-  for(const u of (res.unplaced||[])) items.push({no:u.no,color:u.color,l:u.l,w:u.w,h:u.h,m3:u.m3||0,factor:u.factor||0,placed:false,x:0,y:0,z:UNDERLAY_H,layer:0});
-  _ed.items=items;
-  drawEditor();
-  document.getElementById('edReset').addEventListener('click', ()=>{ setupEditor(res); });
-}
-
-function stackZ(item){
-  const others=_ed.items.filter(o=>o!==item && o.placed && edOverlap(item,o));
-  if(others.length){
-    const parent=others.reduce((a,b)=> (b.z+b.h)>(a.z+a.h)?b:a);
-    const z=parent.z+parent.h+UNDERLAY_H;
-    if(z+item.h<=TRUCK.H+1){ item.z=z; item.layer=parent.layer+1; return; }
-  }
-  item.z=UNDERLAY_H; item.layer=0;
-}
-
-function drawEditor(){
-  const wrap=document.querySelector('.ed-wrap'); const floor=document.getElementById('edFloor');
-  const stage=document.getElementById('edStage'); if(!floor||!stage) return;
-  const W=floor.clientWidth || wrap.clientWidth || 800;
-  const M=60;                                   // Rand in mm
-  const scale=W/(TRUCK.L+2*M);
-  floor.style.height=((TRUCK.W+2*M)*scale)+'px';
-  const frame=floor.querySelector('.truck-frame');
-  frame.style.left=(M*scale)+'px'; frame.style.top=(M*scale)+'px';
-  frame.style.width=(TRUCK.L*scale)+'px'; frame.style.height=(TRUCK.W*scale)+'px';
-  // vorhandene Pakete entfernen
-  floor.querySelectorAll('.ed-pkg').forEach(e=>e.remove());
-  stage.querySelectorAll('.ed-pkg').forEach(e=>e.remove());
-
-  _ed.items.forEach((it,idx)=>{
-    const d=document.createElement('div'); d.className='ed-pkg'; d.dataset.idx=idx;
-    d.style.background=it.color;
-    d.title=`${it.no}  ${it.l}×${it.w}×${it.h} mm`;
-    d.innerHTML=`${esc(it.no)}${it.placed&&it.layer>0?`<span class="lay">L${it.layer+1}</span>`:''}`;
-    if(it.placed){
-      d.style.left=((M+it.x)*scale)+'px'; d.style.top=((M+it.y)*scale)+'px';
-      d.style.width=(it.l*scale)+'px'; d.style.height=(it.w*scale)+'px';
-      d.style.zIndex=10+it.layer;
-      floor.appendChild(d);
-    } else {
-      // Ablage: feste kompakte Kacheln (Länge angedeutet)
-      d.style.width=Math.max(60,Math.min(160,it.l*scale))+'px';
-      stage.appendChild(d);
-    }
-    d.addEventListener('pointerdown', e=>startDrag(e,idx));
-  });
-  updateEdInfo();
-}
-
+// Ein eigenständiger Editor je LKW-Karte. Alle Elemente werden relativ zur
+// Karte gesucht, der Zustand liegt in card._ed – so lassen sich beliebig viele
+// LKW gleichzeitig frei umsortieren, ohne sich gegenseitig zu stören.
 let _drag=null;
-function startDrag(e, idx){
+function makeEditor(card, res){
+  const floor=card.querySelector('.ed-floor');
+  const stage=card.querySelector('.ed-stage');
+  const info =card.querySelector('.ed-info');
+  const side =card.querySelector('.ed-side');
+  const resetBtn=card.querySelector('.ed-reset');
+  if(!floor||!stage) return;
+
+  const build=()=>{
+    const items=[];
+    for(const b of res.boxes) items.push({no:b.no,color:b.color,l:b.l,w:b.w,h:b.h,m3:b.m3||0,factor:b.factor||0,placed:true,x:b.x,y:b.y,z:b.z,layer:b.layer||0});
+    for(const u of (res.unplaced||[])) items.push({no:u.no,color:u.color,l:u.l,w:u.w,h:u.h,m3:u.m3||0,factor:u.factor||0,placed:false,x:0,y:0,z:UNDERLAY_H,layer:0});
+    return items;
+  };
+  const ed={ card, floor, stage, info, side, items:build(), draw, stackZ };
+  card._ed=ed;
+
+  function stackZ(item){
+    const others=ed.items.filter(o=>o!==item && o.placed && edOverlap(item,o));
+    if(others.length){
+      const parent=others.reduce((a,b)=> (b.z+b.h)>(a.z+a.h)?b:a);
+      const z=parent.z+parent.h+UNDERLAY_H;
+      if(z+item.h<=TRUCK.H+1){ item.z=z; item.layer=parent.layer+1; return; }
+    }
+    item.z=UNDERLAY_H; item.layer=0;
+  }
+
+  function draw(){
+    const W=floor.clientWidth || card.clientWidth || 800;
+    const M=60, scale=W/(TRUCK.L+2*M);
+    floor.style.height=((TRUCK.W+2*M)*scale)+'px';
+    const frame=floor.querySelector('.truck-frame');
+    frame.style.left=(M*scale)+'px'; frame.style.top=(M*scale)+'px';
+    frame.style.width=(TRUCK.L*scale)+'px'; frame.style.height=(TRUCK.W*scale)+'px';
+    floor.querySelectorAll('.ed-pkg').forEach(e=>e.remove());
+    stage.querySelectorAll('.ed-pkg').forEach(e=>e.remove());
+    ed.items.forEach((it,idx)=>{
+      const d=document.createElement('div'); d.className='ed-pkg'; d.dataset.idx=idx;
+      d.style.background=it.color;
+      d.title=`${it.no}  ${it.l}×${it.w}×${it.h} mm`;
+      d.innerHTML=`${esc(it.no)}${it.placed&&it.layer>0?`<span class="lay">L${it.layer+1}</span>`:''}`;
+      if(it.placed){
+        d.style.left=((M+it.x)*scale)+'px'; d.style.top=((M+it.y)*scale)+'px';
+        d.style.width=(it.l*scale)+'px'; d.style.height=(it.w*scale)+'px';
+        d.style.zIndex=10+it.layer;
+        floor.appendChild(d);
+      } else {
+        d.style.width=Math.max(60,Math.min(160,it.l*scale))+'px';
+        stage.appendChild(d);
+      }
+      d.addEventListener('pointerdown', e=>startDrag(e,ed,idx));
+    });
+    updateInfo();
+  }
+
+  function updateInfo(){
+    if(!info) return;
+    const placed=ed.items.filter(i=>i.placed);
+    const total=ed.items.length;
+    let P=0, mom=0;
+    for(const i of placed){ const w=edWeight(i); P+=w; mom+=w*(i.x+i.l/2); }
+    const veh=edVehicle();
+    let axStr='—';
+    if(P>1e-6){
+      const span=Math.max(1,veh.xAX-veh.xKP), cog=mom/P;
+      const rAx=P*(cog-veh.xKP)/span + veh.leerAX;
+      const rKp=(P - P*(cog-veh.xKP)/span) + veh.leerKP;
+      const okA=rAx<=veh.maxAX, okK=rKp<=veh.maxKP && (veh.minKP<=0||rKp>=veh.minKP);
+      axStr=`Sattellast <b class="${okK?'ok':'bad'}">${fmt(rKp)} kg</b> · Achslast <b class="${okA?'ok':'bad'}">${fmt(rAx)} kg</b> · Schwerpunkt <b>${fmt(cog/1000,2)} m</b>`;
+    }
+    const tooHigh=placed.some(i=> i.z+i.h>TRUCK.H+1);
+    info.innerHTML=`<span>Geladen <b>${placed.length} / ${total}</b></span>`+
+      `<span>Gewicht <b>${fmt(P)} kg</b>${P>MAX_WEIGHT?` <b class="bad">&gt; 24 t!</b>`:''}</span>`+
+      `<span>${axStr}</span>`+
+      (tooHigh?`<span class="bad">Höhe über 2,80 m!</span>`:'');
+    if(side){
+      const pseudo={boxes:placed.map(i=>({no:i.no,color:i.color,x:i.x,y:i.y,z:i.z,l:i.l,w:i.w,h:i.h})), underlays:[]};
+      for(const i of placed) pseudo.underlays.push({x:i.x,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN},{x:i.x+i.l-UNDERLAY_LEN,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN});
+      side.innerHTML=renderSide(pseudo);
+    }
+  }
+  ed.updateInfo=updateInfo;
+
+  if(resetBtn) resetBtn.addEventListener('click', ()=>{ ed.items=build(); draw(); });
+  draw();
+  return ed;
+}
+
+function startDrag(e, ed, idx){
   e.preventDefault();
-  const it=_ed.items[idx]; const el=e.currentTarget;
+  const el=e.currentTarget;
   const r=el.getBoundingClientRect();
-  _drag={ idx, el, dx:e.clientX-r.left, dy:e.clientY-r.top, w:r.width, h:r.height, moved:false };
+  _drag={ ed, idx, el, dx:e.clientX-r.left, dy:e.clientY-r.top, moved:false };
   el.setPointerCapture(e.pointerId);
   el.classList.add('dragging');
-  // auf feste Positionierung umstellen, damit es dem Cursor über Boden/Ablage folgt
   el.style.position='fixed'; el.style.left=r.left+'px'; el.style.top=r.top+'px';
   el.style.width=r.width+'px'; el.style.height=r.height+'px'; el.style.margin='0';
   window.addEventListener('pointermove', onDrag);
@@ -1287,55 +1399,21 @@ function endDrag(e){
   if(!_drag) return;
   window.removeEventListener('pointermove', onDrag);
   window.removeEventListener('pointerup', endDrag);
-  const it=_ed.items[_drag.idx];
-  const floor=document.getElementById('edFloor'), stage=document.getElementById('edStage');
-  const fr=floor.getBoundingClientRect(), sr=stage.getBoundingClientRect();
+  const ed=_drag.ed, it=ed.items[_drag.idx];
+  const fr=ed.floor.getBoundingClientRect(), sr=ed.stage.getBoundingClientRect();
   const cx=e.clientX, cy=e.clientY;
-  const M=60, W=floor.clientWidth, scale=W/(TRUCK.L+2*M);
-  console.log('EDBG endDrag',JSON.stringify({cx:cx|0,cy:cy|0,moved:_drag.moved,inF:(cx>=fr.left&&cx<=fr.right&&cy>=fr.top&&cy<=fr.bottom),inS:(cx>=sr.left&&cx<=sr.right&&cy>=sr.top&&cy<=sr.bottom)}));
+  const M=60, W=ed.floor.clientWidth, scale=W/(TRUCK.L+2*M);
   if(cx>=sr.left && cx<=sr.right && cy>=sr.top && cy<=sr.bottom){
     it.placed=false;                                  // in die Ablage gelegt
   } else if(cx>=fr.left && cx<=fr.right && cy>=fr.top && cy<=fr.bottom){
-    // Position aus Drop-Punkt (obere-linke Ecke des Pakets)
     let x=(cx-_drag.dx-fr.left)/scale - M;
     let y=(cy-_drag.dy-fr.top)/scale - M;
     x=Math.max(0, Math.min(TRUCK.L-it.l, x));
     y=Math.max(0, Math.min(TRUCK.W-it.w, y));
-    it.x=x; it.y=y; it.placed=true; stackZ(it);
+    it.x=x; it.y=y; it.placed=true; ed.stackZ(it);
   } // sonst: unverändert
   _drag=null;
-  drawEditor();
-}
-
-function updateEdInfo(){
-  const info=document.getElementById('edInfo'); if(!info) return;
-  const placed=_ed.items.filter(i=>i.placed);
-  const total=_ed.items.length;
-  let P=0, mom=0, over=false;
-  for(const i of placed){ const w=edWeight(i); P+=w; mom+=w*(i.x+i.l/2); }
-  // Überlappungs-/Überstand-Check (Info)
-  const veh=edVehicle();
-  let axStr='—';
-  if(P>1e-6){
-    const span=Math.max(1,veh.xAX-veh.xKP), cog=mom/P;
-    const rAx=P*(cog-veh.xKP)/span + veh.leerAX;
-    const rKp=(P - P*(cog-veh.xKP)/span) + veh.leerKP;
-    const okA=rAx<=veh.maxAX, okK=rKp<=veh.maxKP && (veh.minKP<=0||rKp>=veh.minKP);
-    axStr=`Sattellast <b class="${okK?'ok':'bad'}">${fmt(rKp)} kg</b> · Achslast <b class="${okA?'ok':'bad'}">${fmt(rAx)} kg</b> · Schwerpunkt <b>${fmt(cog/1000,2)} m</b>`;
-  }
-  // Höhen-Überschreitung?
-  const tooHigh=placed.some(i=> i.z+i.h>TRUCK.H+1);
-  info.innerHTML=`<span>Geladen <b>${placed.length} / ${total}</b></span>`+
-    `<span>Gewicht <b>${fmt(P)} kg</b>${P>MAX_WEIGHT?` <b class="bad">&gt; 24 t!</b>`:''}</span>`+
-    `<span>${axStr}</span>`+
-    (tooHigh?`<span class="bad">Höhe über 2,80 m!</span>`:'');
-  // Live-Seitenansicht aktualisieren
-  const side=document.getElementById('edSide');
-  if(side){
-    const pseudo={boxes:placed.map(i=>({no:i.no,color:i.color,x:i.x,y:i.y,z:i.z,l:i.l,w:i.w,h:i.h})), underlays:[]};
-    for(const i of placed) pseudo.underlays.push({x:i.x,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN},{x:i.x+i.l-UNDERLAY_LEN,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN});
-    side.innerHTML=renderSide(pseudo);
-  }
+  ed.draw();
 }
 
 /* =========================================================================
@@ -1400,60 +1478,115 @@ function renderAxle(ax){
   return h;
 }
 
-function render(res){
+// Karte eines einzelnen LKW (Kennzahlen, Achslast, Ansichten, Editor)
+function truckCardHTML(res, idx, N){
   const st=res.stats;
   const wPct=st.totW/MAX_WEIGHT*100;
   const vPct=st.totV/MAX_VOLUME*100;
-  const loadPct=st.totReq? st.totLoad/st.totReq*100:0;
+  let h='';
+  h+=`<div class="truck-card" data-truck="${idx}">`;
+  h+=`<div class="tc-head"><span class="truck-badge">🚛 LKW ${idx+1} / ${N}</span>
+      <div><div class="tc-title">Sattelzug ${idx+1}</div>
+      <div class="tc-sub">${res.boxes.length} Paket(e) · ${fmt(st.totW)} kg · ${fmt(st.totV,1)} m³</div></div></div>`;
+
+  // Kennzahlen je LKW
+  h+='<div class="stats">';
+  h+=`<div class="stat"><div class="k">Pakete auf LKW</div><div class="v">${res.boxes.length}</div><div class="sub">geladen</div></div>`;
+  if(st.weightLimit){
+    h+=`<div class="stat"><div class="k">Gewicht</div><div class="v">${fmt(st.totW)} kg</div><div class="sub">von 24.000 kg</div>${bar(wPct, wPct>99.5?'err':wPct>85?'warn':'ok')}</div>`;
+  } else {
+    const over=st.totW>MAX_WEIGHT;
+    h+=`<div class="stat${over?'':' muted'}"><div class="k">Gewicht</div><div class="v">${fmt(st.totW)} kg</div><div class="sub">Limit deaktiviert${over?' · &gt; 24 t!':''}</div>${bar(wPct, over?'err':'warn')}</div>`;
+  }
+  h+=`<div class="stat"><div class="k">Volumen (Raum)</div><div class="v">${fmt(st.totV,1)} m³</div><div class="sub">von 90 m³${st.totNet>0?` · Holz netto ${fmt(st.totNet,3)} m³`:''}</div>${bar(vPct, vPct>99.5?'err':vPct>85?'warn':'ok')}</div>`;
+  h+=`<div class="stat"><div class="k">Lademeter</div><div class="v">${fmt(st.ldm,2)} ldm</div><div class="sub">Länge genutzt: ${fmt(st.usedLen/1000,2)} m</div></div>`;
+  h+=`<div class="stat"><div class="k">Lagen (max.)</div><div class="v">${st.maxLayerUsed}</div><div class="sub">Ladefläche: ${fmt(st.floorArea/1e6,2)} m²</div></div>`;
+  h+='</div>';
+
+  // Warnungen dieses LKW (v. a. Achslast)
+  if(res.warnings.length){
+    h+='<div class="msgs">';
+    for(const w of res.warnings) h+=`<div class="msg warn">⚠️ ${esc(w)}</div>`;
+    h+='</div>';
+  }
+
+  // Achslasten dieses LKW
+  if(st.axle) h+=renderAxle(st.axle);
+
+  // Ansichten dieses LKW
+  h+=`<div class="view-title"><span>Seitenansicht <small>(Länge × Höhe, mit Rädern)</small></span></div>`;
+  h+=`<div class="svg-box">${renderSide(res)}</div>`;
+  h+=`<div class="view-title"><span>Draufsicht <small>(Länge × Breite – unterste Lage, ×N = Anzahl Lagen)</small></span></div>`;
+  h+=`<div class="svg-box">${renderTop(res)}</div>`;
+
+  h+=`<div class="view-title no-print"><span>3D-Simulation <small>(frei drehbar)</small></span></div>`;
+  h+=`<div class="c3d-wrap">
+      <canvas class="c3d"></canvas>
+      <div class="c3d-ctrl">
+        <button class="c3d-rot" type="button">⟳ Auto-Rotation</button>
+        <button class="c3d-reset" type="button">Ansicht zurücksetzen</button>
+      </div>
+      <div class="c3d-hint">Ziehen zum Drehen · Scrollen zum Zoomen</div>
+    </div>`;
+
+  h+=`<div class="view-title no-print"><span>✋ Manuelle Anordnung <small>(ziehen zum Verschieben; in die Ablage ziehen zum Entfernen; auf ein Paket ziehen = stapeln; Länge bleibt fix)</small></span>
+      <button class="btn btn-ghost no-print ed-reset" type="button">↺ Auto-Anordnung</button></div>
+    <div class="ed-wrap no-print">
+      <div class="ed-floor"><div class="truck-frame"></div></div>
+      <div class="ed-stage"><div class="ed-stage-label">Neben LKW ${idx+1} (nicht geladen)</div></div>
+      <div class="ed-info"></div>
+    </div>
+    <div class="view-title"><span>Seitenansicht (aktuelle Anordnung)</span></div>
+    <div class="svg-box ed-side"></div>`;
+
+  // Legende dieses LKW
+  h+='<div class="legend">';
+  const seen={};
+  for(const b of res.boxes){ if(!seen[b.no]) seen[b.no]=b; }
+  for(const no in seen){
+    const b=seen[no];
+    h+=`<div class="item"><span class="swatch" style="background:${b.color}"></span>
+      <b>${esc(no)}</b> <span class="dim">${b.l}×${b.w}×${b.h} mm</span></div>`;
+  }
+  h+='</div>';
+  h+='</div>'; // .truck-card
+  return h;
+}
+
+function render(trucks){
+  const N=trucks.length;
+  const agg=aggregate(trucks);
+  const loadPct=agg.totReq? agg.totLoad/agg.totReq*100:0;
 
   let html='';
-
-  // Kopfzeile (Auftrag/Datum) + Druck-/PDF-Button
   const auftrag = (document.getElementById('auftrag').value||'').trim();
   const dISO = document.getElementById('datum').value||'';
   const dDE = dISO ? dISO.split('-').reverse().join('.') : '—';
   html+=`<div class="res-head">
     <div>
       <div class="rh-title">Beladeplan – Sattelzug (Tautliner)</div>
-      <div class="rh-meta">Auftrag <b>${esc(auftrag||'—')}</b> · Datum <b>${esc(dDE)}</b> · ${st.totLoad}/${st.totReq} Pakete · ${fmt(st.totW)} kg</div>
+      <div class="rh-meta">Auftrag <b>${esc(auftrag||'—')}</b> · Datum <b>${esc(dDE)}</b> · ${agg.totLoad}/${agg.totReq} Pakete · ${fmt(agg.totW)} kg · <b>${N} LKW</b></div>
     </div>
     <button class="btn btn-ghost no-print" onclick="window.print()">🖨 Beladeplan drucken / PDF</button>
   </div>`;
 
-  // Meldungen
-  if(res.warnings.length){
-    html+='<div class="msgs">';
-    for(const w of res.warnings) html+=`<div class="msg warn">⚠️ ${esc(w)}</div>`;
-    html+='</div>';
-  }
-  if(st.totLoad===st.totReq && st.totReq>0 && !res.warnings.length){
-    html+=`<div class="msgs"><div class="msg ok">✓ Alle ${st.totReq} Pakete passen in den Sattelzug.</div></div>`;
+  // Sammel-Meldung: Anzahl benötigter LKW
+  const anyBoxes = trucks.some(t=>t.boxes.length);
+  if(anyBoxes){
+    if(N===1){
+      html+=`<div class="msgs"><div class="msg ok">✓ Alle geladenen Pakete passen auf <b>einen</b> Sattelzug (${agg.totLoad}/${agg.totReq}).</div></div>`;
+    } else {
+      html+=`<div class="msgs"><div class="msg warn">ℹ️ Ein Sattelzug reicht nicht aus – die Ladung wurde automatisch auf <b>${N} LKW</b> verteilt (${agg.totLoad}/${agg.totReq} Pakete geladen).</div></div>`;
+    }
   }
 
-  // Kennzahlen
-  html+='<div class="stats">';
-  html+=`<div class="stat"><div class="k">Geladene Pakete</div><div class="v">${st.totLoad} / ${st.totReq}</div>${bar(loadPct, loadPct>=100?'ok':'warn')}</div>`;
-  if(st.weightLimit){
-    html+=`<div class="stat"><div class="k">Gewicht</div><div class="v">${fmt(st.totW)} kg</div><div class="sub">von 24.000 kg</div>${bar(wPct, wPct>99.5?'err':wPct>85?'warn':'ok')}</div>`;
-  } else {
-    const over = st.totW>MAX_WEIGHT;
-    html+=`<div class="stat${over?'':' muted'}"><div class="k">Gewicht</div><div class="v">${fmt(st.totW)} kg</div><div class="sub">Limit deaktiviert${over?' · &gt; 24 t!':''}</div>${bar(wPct, over?'err':'warn')}</div>`;
-  }
-  html+=`<div class="stat"><div class="k">Volumen (Raum)</div><div class="v">${fmt(st.totV,1)} m³</div><div class="sub">von 90 m³${st.totNet>0?` · Holz netto ${fmt(st.totNet,3)} m³`:''}</div>${bar(vPct, vPct>99.5?'err':vPct>85?'warn':'ok')}</div>`;
-  html+=`<div class="stat"><div class="k">Lademeter</div><div class="v">${fmt(st.ldm,2)} ldm</div><div class="sub">Länge genutzt: ${fmt(st.usedLen/1000,2)} m</div></div>`;
-  html+=`<div class="stat"><div class="k">Lagen (max.)</div><div class="v">${st.maxLayerUsed}</div><div class="sub">Ladefläche: ${fmt(st.floorArea/1e6,2)} m²</div></div>`;
-  html+='</div>';
-
-  // Lastverteilung / Achslasten
-  if(st.axle) html+=renderAxle(st.axle);
-
-  // Nicht geladene Pakete mit Begründung
+  // Aggregierte Aufstellung nicht geladener Pakete (dauerhaft nicht verladbar)
   const nlRows=[];
-  for(const no in st.notLoaded){
-    const d=st.notLoaded[no], info=st.pkgInfo[no]||{};
+  for(const no in agg.notLoaded){
+    const d=agg.notLoaded[no], info=agg.pkgInfo[no]||{};
     const add=(cnt,cls,label,extra)=>{ if(cnt>0) nlRows.push({no,info,cnt,cls,label,extra:extra||''}); };
     add(d.oversize,'oversize','Zu groß für den Laderaum',d.oversizeReason);
-    add(d.space,  'space', 'Kein Platz mehr auf der Ladefläche');
+    add(d.space,  'space', 'Kein Platz (auch nicht auf weiterem LKW)');
     add(d.weight, 'weight','Maximalgewicht (24 t) erreicht');
     add(d.volume, 'volume','Maximalvolumen (90 m³) erreicht');
   }
@@ -1474,52 +1607,26 @@ function render(res){
     html+=`</tbody></table></div></div>`;
   }
 
-  // Ansichten
-  if(res.boxes.length){
-    html+=`<div class="view-title"><span>Seitenansicht <small>(Länge × Höhe, mit Rädern)</small></span></div>`;
-    html+=`<div class="svg-box">${renderSide(res)}</div>`;
-    html+=`<div class="view-title" style="margin-top:16px"><span>Draufsicht <small>(Länge × Breite, ohne Räder – unterste Lage, ×N = Anzahl Lagen)</small></span></div>`;
-    html+=`<div class="svg-box">${renderTop(res)}</div>`;
-
-    html+=`<div class="view-title no-print" style="margin-top:16px"><span>3D-Simulation <small>(frei drehbar)</small></span></div>`;
-    html+=`<div class="c3d-wrap">
-      <canvas id="c3d"></canvas>
-      <div class="c3d-ctrl">
-        <button id="c3dRot" type="button">⟳ Auto-Rotation</button>
-        <button id="c3dReset" type="button">Ansicht zurücksetzen</button>
-      </div>
-      <div class="c3d-hint">Ziehen zum Drehen · Scrollen zum Zoomen</div>
-    </div>`;
-
-    html+=`<div class="view-title no-print" style="margin-top:16px"><span>✋ Manuelle Anordnung <small>(Draufsicht – ziehen zum Verschieben; in die Ablage ziehen zum Entfernen; auf ein Paket ziehen = stapeln; Länge bleibt fix)</small></span>
-      <button class="btn btn-ghost no-print" id="edReset" type="button">↺ Auto-Anordnung</button></div>
-    <div class="ed-wrap no-print">
-      <div class="ed-floor" id="edFloor"><div class="truck-frame"></div></div>
-      <div class="ed-stage" id="edStage"><div class="ed-stage-label">Neben dem LKW (nicht geladen)</div></div>
-      <div class="ed-info" id="edInfo"></div>
-    </div>
-    <div class="view-title" style="margin-top:12px"><span>Seitenansicht (aktuelle Anordnung)</span></div>
-    <div class="svg-box" id="edSide"></div>`;
-
-    // Legende
-    html+='<div class="legend">';
-    const seen={};
-    for(const b of res.boxes){
-      if(seen[b.no]) continue; seen[b.no]=b;
-    }
-    for(const no in seen){
-      const b=seen[no];
-      const load=st.loaded[no]||0, req=st.requested[no]||0;
-      html+=`<div class="item"><span class="swatch" style="background:${b.color}"></span>
-        <b>${esc(no)}</b> <span class="dim">${b.l}×${b.w}×${b.h} mm · ${load}/${req} Stk</span></div>`;
-    }
+  if(anyBoxes){
+    if(N>1) html+=`<div class="view-title"><span>Alle ${N} LKW nebeneinander <small>(quer scrollen)</small></span></div>`;
+    html+='<div class="trucks-row">';
+    trucks.forEach((res,i)=>{ if(res.boxes.length) html+=truckCardHTML(res, i, N); });
     html+='</div>';
   } else {
     html+=`<div class="empty">Keine Pakete konnten geladen werden. Bitte Maße prüfen.</div>`;
   }
 
   document.getElementById('results').innerHTML=html;
-  if(res.boxes.length){ setup3D(res); setupEditor(res); }
+
+  // Interaktive Teile je LKW-Karte aufbauen
+  teardown3D();
+  const cards=document.querySelectorAll('#results .truck-card');
+  cards.forEach(card=>{
+    const res=trucks[+card.dataset.truck];
+    const cv=card.querySelector('.c3d');
+    if(cv) setup3D(res, cv);
+    makeEditor(card, res);
+  });
 }
 
 /* =========================================================================
@@ -1544,9 +1651,9 @@ document.getElementById('calc').addEventListener('click',()=>{
     leerAxle:    num0('axLeerAX'),
     minKingpin:  num0('axMinKP'),
   };
-  const res=optimize(list,{weightLimit, axle});
-  if(errors.length) res.warnings.unshift(...errors);
-  render(res);
+  const trucks=optimizeMulti(list,{weightLimit, axle});
+  if(errors.length && trucks[0]) trucks[0].warnings.unshift(...errors);
+  render(trucks);
   document.getElementById('resultPanel').scrollIntoView({behavior:'smooth',block:'start'});
 });
 

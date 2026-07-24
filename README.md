@@ -55,6 +55,13 @@ Gewicht = Volumen × Faktor (kg/m³)
 
 ## Funktionen
 
+- **Mehrere LKW automatisch**: Reicht ein Sattelzug nicht aus, wird die
+  Ladung automatisch auf einen 2., 3., … x. LKW verteilt (jeder LKW wird
+  für sich optimal gepackt; Gewicht 24 t, Volumen 90 m³ und Achslasten
+  gelten je Fahrzeug). Alle LKW werden **nebeneinander** angezeigt
+  (quer scrollbar) und **durchnummeriert** („LKW 1 / N"). Seiten-, Drauf-
+  und 3D-Ansicht sowie die **frei verschiebbare** Anordnung gibt es je LKW
+  nebeneinander; eine Kopfzeile nennt die Gesamtzahl der benötigten LKW.
 - Auftragsnummer und Datum (Kalender, ab tagesaktuellem Datum).
 - Pakettabelle: Paketnr., L × B × H (mm), Anzahl, Kategorie – jede
   Paketnummer erhält eine durchgehend eindeutige Farbe.
