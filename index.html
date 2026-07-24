@@ -758,16 +758,69 @@ function planLayeredLanes(units){
   return {placements, notPlacedU, shelves};
 }
 
+// Strategie E: Boden voll ausnutzen. Die unterste Lage wird – so weit möglich
+// – über die volle Ladelänge (13,50 m) gefüllt, indem mehrere Pakete je Reihe
+// hintereinander kombiniert werden (Best-Fit-Decreasing in Reihen à 13,50 m).
+// Die längsten Reihen kommen nach unten, kürzere darüber (volle Auflage, kein
+// Überstand) – so wird der LKW von unten nach oben maximal beladen.
+function planFullFloorLanes(units){
+  if(!units.length) return {placements:[], notPlacedU:[], shelves:[]};
+  const maxFW=Math.max(...units.map(u=>u.footW));
+  const N=Math.max(1, Math.floor((TRUCK.W+0.01)/maxFW));       // Reihen nebeneinander
+  const maxH=Math.max(...units.map(u=>u.h));
+  let maxLay=Math.max(1, Math.floor(TRUCK.H/(UNDERLAY_H+maxH)));
+  if(maxH<=LOW_H) maxLay=Math.min(maxLay, MAX_LAYERS_LOW);      // ≤780 mm -> max 3 Lagen
+  const maxBins=N*maxLay;
+
+  // Best-Fit-Decreasing: Pakete (längstes zuerst) in Reihen à 13,50 m füllen.
+  const rem=units.slice().sort((a,b)=> b.footL-a.footL || b.h-a.h);
+  const bins=[]; const notPlacedU=[];
+  for(const u of rem){
+    let best=null;
+    for(const bin of bins){
+      const room=TRUCK.L-bin.len;
+      if(u.footL<=room+0.01 && (!best || room<best.room)) best={bin,room};
+    }
+    if(best){ best.bin.items.push(u); best.bin.len+=u.footL; }
+    else if(bins.length<maxBins){ bins.push({items:[u], len:u.footL}); }
+    else notPlacedU.push(u);                                   // passt auf keine Reihe mehr
+  }
+
+  // Reihen nach Länge absteigend -> längste Reihen zuerst = unterste Lagen.
+  bins.sort((a,b)=> b.len-a.len);
+  const lanes=[]; for(let i=0;i<N;i++) lanes.push({y:i*maxFW, layers:[]});
+  bins.forEach((bin,i)=>{ lanes[i%N].layers.push(bin); });     // reihum auf die Reihen verteilen
+
+  const placements=[]; const shelves=[];
+  for(const lane of lanes){
+    if(!lane.layers.length) continue;
+    let z=0;
+    lane.layers.forEach((layer,li)=>{
+      let x=0; const maxLH=Math.max(...layer.items.map(u=>u.h));
+      for(const u of layer.items){ placements.push({u, x, y:lane.y, z:z+UNDERLAY_H, layer:li}); x+=u.footL; }
+      z+=UNDERLAY_H+maxLH;
+    });
+    shelves.push({y:lane.y, width:maxFW, cursorX:lane.layers[0].len});
+  }
+  return {placements, notPlacedU, shelves};
+}
+
 // packFloor: alle Strategien rechnen (Säulen- und Lagen-Packer) und die
-// Variante mit den meisten geladenen Paketen nehmen.
+// Variante mit den meisten geladenen Paketen nehmen; bei Gleichstand die mit
+// der am besten (länger) gefüllten Bodenlage.
 function packFloor(units){
   const cands=[];
   for(const former of [sameNumberColumns, mixedWidthColumns])
     for(const packer of [planMixedLanes, planWidthGroups, planBalancedLanes])
       cands.push(expandColumnPlan(packer(former(units))));
   cands.push(planLayeredLanes(units));
-  let best=null;
-  for(const p of cands){ if(!best || p.placements.length>best.placements.length) best=p; }
+  cands.push(planFullFloorLanes(units));
+  const baseLen=p=> p.placements.filter(pl=>(pl.layer||0)===0).reduce((s,pl)=>s+(pl.u.footL||0),0);
+  let best=null, bestN=-1, bestB=-1;
+  for(const p of cands){
+    const n=p.placements.length, b=baseLen(p);
+    if(n>bestN || (n===bestN && b>bestB)){ best=p; bestN=n; bestB=b; }
+  }
   return best;
 }
 
@@ -1299,6 +1352,7 @@ function makeEditor(card, res){
   const info =card.querySelector('.ed-info');
   const side =card.querySelector('.ed-side');
   const resetBtn=card.querySelector('.ed-reset');
+  const clearBtn=card.querySelector('.ed-clear');
   if(!floor||!stage) return;
 
   const build=()=>{
@@ -1377,6 +1431,8 @@ function makeEditor(card, res){
   ed.updateInfo=updateInfo;
 
   if(resetBtn) resetBtn.addEventListener('click', ()=>{ ed.items=build(); draw(); });
+  // Alle Pakete vom LKW entfernen -> wandern in die Ablage „Neben LKW"
+  if(clearBtn) clearBtn.addEventListener('click', ()=>{ ed.items.forEach(it=>{ it.placed=false; it.z=UNDERLAY_H; it.layer=0; }); draw(); });
   draw();
   return ed;
 }
@@ -1533,7 +1589,10 @@ function truckCardHTML(res, idx, N){
     </div>`;
 
   h+=`<div class="view-title no-print"><span>✋ Manuelle Anordnung <small>(ziehen zum Verschieben; in die Ablage ziehen zum Entfernen; auf ein Paket ziehen = stapeln; Länge bleibt fix)</small></span>
-      <button class="btn btn-ghost no-print ed-reset" type="button">↺ Auto-Anordnung</button></div>
+      <span style="display:inline-flex;gap:8px">
+        <button class="btn btn-ghost no-print ed-clear" type="button">🗑 Alle entfernen</button>
+        <button class="btn btn-ghost no-print ed-reset" type="button">↺ Auto-Anordnung</button>
+      </span></div>
     <div class="ed-wrap no-print">
       <div class="ed-floor"><div class="truck-frame"></div></div>
       <div class="ed-stage"><div class="ed-stage-label">Neben LKW ${idx+1} (nicht geladen)</div></div>

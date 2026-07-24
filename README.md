@@ -103,7 +103,9 @@ Gewicht = Volumen × Faktor (kg/m³)
   und von dort wieder platzieren; ein Paket auf ein anderes ziehen stapelt es.
   Die Länge bleibt immer fixiert (kein Drehen). Live-Anzeige von geladenen
   Paketen, Gewicht, Sattel-/Achslast und Schwerpunkt sowie eine mitlaufende
-  Seitenansicht; „↺ Auto-Anordnung" stellt die automatische Beladung wieder her.
+  Seitenansicht; „↺ Auto-Anordnung" stellt die automatische Beladung wieder
+  her, „🗑 Alle entfernen" räumt den LKW leer (alle Pakete wandern in die
+  Ablage), um von Hand neu zu beladen.
 - **Frei drehbare 3D-Simulation** der Beladung (eigenständiger Canvas-
   Renderer ohne Fremdbibliothek): Drehen per Maus/Touch, Zoomen per
   Scrollrad, Auto-Rotation und „Ansicht zurücksetzen".
@@ -140,8 +142,13 @@ Gewicht = Volumen × Faktor (kg/m³)
    gleichmäßig dicht) und (d) ein **lagenweiser Packer**: Basislage füllen,
    obere Lagen auf die tragende Länge darunter – ein Paket darf über
    mehreren unteren liegen („Brücke"), verboten ist nur ein Überstand in
-   Längsrichtung. So wird die Anordnung je nach Maßen automatisch für
-   maximale Beladung gewählt.
+   Längsrichtung. Und (e) ein **Boden-voll-Packer**: die unterste Lage wird
+   je Reihe möglichst über die volle Ladelänge (13,50 m) gefüllt, indem
+   mehrere Pakete hintereinander kombiniert werden (Best-Fit-Decreasing in
+   Reihen à 13,50 m); die längsten Reihen kommen nach unten, kürzere darüber
+   (volle Auflage). So wird der LKW von unten nach oben maximal beladen.
+   Bei Gleichstand der Paketanzahl gewinnt die Variante mit der **am besten
+   (länger) gefüllten Bodenlage**.
 4. Emission Lage für Lage von unten nach oben unter Beachtung von
    Gewicht (24 t) und Volumen (90 m³).
 5. Beladung immer bündig an der vorderen Ladewand (Stirnwand) beginnen –
