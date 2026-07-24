@@ -366,6 +366,8 @@ function addRow(data={}){
   const color = colorFor(idx);
   const tr = document.createElement('tr');
   tr.dataset.color = color;
+  // Brett-/Latten-Aufbau (aus PDF) als Datensatz je Zeile mitführen
+  if(data.brd) tr.dataset.brd = JSON.stringify(data.brd);
   tr.innerHTML = `
     <td><input type="text"   class="f-no"    value="${data.no ?? ('P'+(idx+1))}"></td>
     <td><input type="number" class="f-l" min="1" step="1" value="${data.l ?? ''}" placeholder="Länge eingeben"></td>
@@ -411,7 +413,7 @@ document.getElementById('clearRows').addEventListener('click',()=>{
 /* =========================================================================
    Auftrag speichern / laden (localStorage + Datei-Export/Import)
    ========================================================================= */
-const LS_KEY='laderaum_auftrag_v3';   // v3: Beispielauftrag 2026-2863 + m³-Feld
+const LS_KEY='laderaum_auftrag_v4';   // v4: Beispielauftrag inkl. Brett-/Latten-Aufbau
 let _restoring=false, _saveT=0;
 const val = id => document.getElementById(id).value;
 
@@ -425,7 +427,8 @@ function collectState(){
       no:tr.querySelector('.f-no').value, l:tr.querySelector('.f-l').value,
       w:tr.querySelector('.f-w').value,  h:tr.querySelector('.f-h').value,
       m3:tr.querySelector('.f-m3').value, n:tr.querySelector('.f-n').value,
-      cat:tr.querySelector('.f-cat').value
+      cat:tr.querySelector('.f-cat').value,
+      brd:tr.dataset.brd||''
     }))
   };
 }
@@ -440,7 +443,7 @@ function applyState(s){
     setIf('axKP',ax.kp); setIf('axAX',ax.ax); setIf('axMaxKP',ax.maxKP);
     setIf('axMaxAX',ax.maxAX); setIf('axLeerKP',ax.leerKP); setIf('axLeerAX',ax.leerAX);
     rowsEl.innerHTML=''; rowSeq=0;
-    for(const r of s.rows) addRow({no:r.no, l:r.l, w:r.w, h:r.h, m3:r.m3, n:r.n, cat:r.cat});
+    for(const r of s.rows){ let brd=null; if(r.brd){ try{ brd=JSON.parse(r.brd); }catch(e){} } addRow({no:r.no, l:r.l, w:r.w, h:r.h, m3:r.m3, n:r.n, cat:r.cat, brd}); }
     if(!s.rows.length) addRow();
     recolor();
   } finally { _restoring=false; }
@@ -480,17 +483,17 @@ if(!restoreLocal()){
   document.getElementById('auftrag').value='2026-2863';
   document.getElementById('datum').value='2026-07-21';
   const ORDER=[
-    {no:'1a·30x160x4500', l:4500, w:1120, h:1086, m3:3.478, cat:'hg'},
-    {no:'1b·30x160x5000', l:5000, w:1120, h:1086, m3:3.864, cat:'hg'},
-    {no:'2a·40x60x4000',  l:4000, w:1080, h:1084, m3:3.283, cat:'hg'},
-    {no:'2b·40x60x5000',  l:5000, w:1080, h:1084, m3:4.104, cat:'hg'},
-    {no:'3·60x100x5000',  l:5000, w:1100, h:1074, m3:4.620, cat:'hg'},
-    {no:'4·60x280x5000',  l:5000, w:1120, h:1074, m3:4.704, cat:'hg'},
-    {no:'5a·100x100x3000',l:3000, w:1100, h:1044, m3:2.970, cat:'hg'},
-    {no:'5b·100x100x4000',l:4000, w:1100, h:1044, m3:3.960, cat:'hg'},
-    {no:'6·100x120x5000', l:5000, w:1080, h:1044, m3:4.860, cat:'hg'},
+    {no:'1a·30x160x4500', l:4500, w:1120, h:1086, m3:3.478, cat:'hg', brd:{ac:7, hi:23, bb:30, bh:160, st:18}},
+    {no:'1b·30x160x5000', l:5000, w:1120, h:1086, m3:3.864, cat:'hg', brd:{ac:7, hi:23, bb:30, bh:160, st:18}},
+    {no:'2a·40x60x4000',  l:4000, w:1080, h:1084, m3:3.283, cat:'hg', brd:{ac:18,hi:19, bb:40, bh:60,  st:18}},
+    {no:'2b·40x60x5000',  l:5000, w:1080, h:1084, m3:4.104, cat:'hg', brd:{ac:18,hi:19, bb:40, bh:60,  st:18}},
+    {no:'3·60x100x5000',  l:5000, w:1100, h:1074, m3:4.620, cat:'hg', brd:{ac:11,hi:14, bb:60, bh:100, st:18}},
+    {no:'4·60x280x5000',  l:5000, w:1120, h:1074, m3:4.704, cat:'hg', brd:{ac:4, hi:14, bb:60, bh:280, st:18}},
+    {no:'5a·100x100x3000',l:3000, w:1100, h:1044, m3:2.970, cat:'hg', brd:{ac:11,hi:9,  bb:100,bh:100, st:18}},
+    {no:'5b·100x100x4000',l:4000, w:1100, h:1044, m3:3.960, cat:'hg', brd:{ac:11,hi:9,  bb:100,bh:100, st:18}},
+    {no:'6·100x120x5000', l:5000, w:1080, h:1044, m3:4.860, cat:'hg', brd:{ac:9, hi:9,  bb:100,bh:120, st:18}},
   ];
-  for(const r of ORDER) addRow({no:r.no, l:r.l, w:r.w, h:r.h, m3:r.m3, n:1, cat:r.cat});
+  for(const r of ORDER) addRow({no:r.no, l:r.l, w:r.w, h:r.h, m3:r.m3, n:1, cat:r.cat, brd:r.brd});
   recolor();
 }
 
@@ -510,7 +513,8 @@ function readPackages(){
     const color = tr.dataset.color;
     if(!l||!w||!h||!n) return; // leere Zeile ignorieren
     if(l<=0||w<=0||h<=0||n<=0){ errors.push(`Paket ${no}: ungültige Werte.`); return; }
-    list.push({no,l,w,h,n,cat,color,factor:CATEGORIES[cat].factor, m3:(isFinite(m3)&&m3>0)?m3:0});
+    let brd=null; if(tr.dataset.brd){ try{ brd=JSON.parse(tr.dataset.brd); }catch(e){} }
+    list.push({no,l,w,h,n,cat,color,factor:CATEGORIES[cat].factor, m3:(isFinite(m3)&&m3>0)?m3:0, brd});
   });
   return {list,errors};
 }
@@ -861,7 +865,7 @@ function optimize(pkgs, opts={}){
     }
     for(let k=0;k<p.n;k++) units.push({
       no:p.no, color:p.color, factor:p.factor, cat:p.cat, l:p.l, w:p.w, h:p.h, m3:p.m3||0,
-      footL:p.l+GAP, footW:p.w+GAP
+      brd:p.brd||null, footL:p.l+GAP, footW:p.w+GAP
     });
   }
 
@@ -890,7 +894,7 @@ function optimize(pkgs, opts={}){
     if(weightLimit && totW+wt > MAX_WEIGHT+1e-6){ budgetHit=budgetHit||'weight'; stop=true; dropped.push(it); continue; }
     if(totV+grossVol > MAX_VOLUME+1e-6){ budgetHit=budgetHit||'volume'; stop=true; dropped.push(it); continue; }
     totW+=wt; totV+=grossVol; totNet+=netVol;
-    boxes.push({no:it.no,color:it.color,x:pl.x,y:pl.y,z:pl.z,l:it.l,w:it.w,h:it.h,layer:pl.layer||0,wt,factor:it.factor,m3:it.m3||0});
+    boxes.push({no:it.no,color:it.color,x:pl.x,y:pl.y,z:pl.z,l:it.l,w:it.w,h:it.h,layer:pl.layer||0,wt,factor:it.factor,m3:it.m3||0,brd:it.brd||null});
     underlays.push({x:pl.x,                   y:pl.y, z:pl.z-UNDERLAY_H, len:UNDERLAY_LEN});
     underlays.push({x:pl.x+it.l-UNDERLAY_LEN, y:pl.y, z:pl.z-UNDERLAY_H, len:UNDERLAY_LEN});
     loaded[it.no]=(loaded[it.no]||0)+1;
@@ -1024,7 +1028,7 @@ function unitsToPkgs(units){
   for(const u of units){
     const key=[u.no,u.l,u.w,u.h,u.m3||0,u.cat].join('|');
     let p=map.get(key);
-    if(!p){ p={no:u.no,l:u.l,w:u.w,h:u.h,m3:u.m3||0,factor:u.factor,color:u.color,cat:u.cat,n:0}; map.set(key,p); }
+    if(!p){ p={no:u.no,l:u.l,w:u.w,h:u.h,m3:u.m3||0,factor:u.factor,color:u.color,cat:u.cat,brd:u.brd||null,n:0}; map.set(key,p); }
     p.n++;
   }
   return [...map.values()];
@@ -1109,10 +1113,22 @@ function renderSide(res){
   for(const b of boxes){
     s+=`<rect x="${X(b.x)}" y="${Zt(b.z,b.h)}" width="${b.l}" height="${b.h}" rx="6"
          fill="${b.color}" fill-opacity="0.85" stroke="#0f172a" stroke-width="2.5"/>`;
+    // Brett-/Latten-Aufbau: Brettlagen (hi) übereinander, dazwischen Latten (st)
+    if(b.brd && b.brd.hi>1 && b.brd.bb>0){
+      const {hi,bb,st}=b.brd; let zc=b.z;
+      for(let k=0;k<hi;k++){
+        zc+=bb;
+        if(k<hi-1){
+          if(st>0) s+=`<rect x="${X(b.x)}" y="${Zt(zc,st)}" width="${b.l}" height="${st}" fill="#b45309" fill-opacity="0.92" stroke="#78350f" stroke-width="1"/>`;
+          else     s+=`<line x1="${X(b.x)}" y1="${Zt(zc,0)}" x2="${X(b.x+b.l)}" y2="${Zt(zc,0)}" stroke="#0f172a" stroke-width="1" stroke-opacity="0.45"/>`;
+          zc+=st;
+        }
+      }
+    }
     if(b.l>700 && b.h>90){
       s+=`<text x="${X(b.x+b.l/2)}" y="${Zt(b.z,b.h)+b.h/2+18}" text-anchor="middle"
            font-size="52" font-weight="700" fill="#fff" paint-order="stroke"
-           stroke="#0f172a" stroke-width="4">${esc(b.no)}</text>`;
+           stroke="#0f172a" stroke-width="6">${esc(b.no)}</text>`;
     }
   }
   // Maßangaben
@@ -1143,6 +1159,14 @@ function renderTop(res){
     const layersHere=res.boxes.filter(o=> o.y===b.y && o.x < b.x+b.l && o.x+o.l > b.x).length;
     s+=`<rect x="${X(b.x)}" y="${Y(b.y)}" width="${b.l}" height="${b.w}" rx="6"
          fill="${b.color}" fill-opacity="0.88" stroke="#0f172a" stroke-width="2.5"/>`;
+    // Bretter quer nebeneinander (ac Stück, je bh breit) als Längslinien
+    if(b.brd && b.brd.ac>1 && b.brd.bh>0){
+      const {ac,bh}=b.brd;
+      for(let j=1;j<ac;j++){
+        const yy=b.y+j*bh; if(yy>=b.y+b.w-0.5) break;
+        s+=`<line x1="${X(b.x)}" y1="${Y(yy)}" x2="${X(b.x+b.l)}" y2="${Y(yy)}" stroke="#0f172a" stroke-width="16" stroke-opacity="0.45"/>`;
+      }
+    }
     // Unterlagshölzer (2 Querhölzer) angedeutet
     s+=`<rect x="${X(b.x)}" y="${Y(b.y)}" width="${UNDERLAY_LEN}" height="${b.w}" fill="#451a03" fill-opacity="0.25"/>`;
     s+=`<rect x="${X(b.x+b.l-UNDERLAY_LEN)}" y="${Y(b.y)}" width="${UNDERLAY_LEN}" height="${b.w}" fill="#451a03" fill-opacity="0.25"/>`;
@@ -1367,8 +1391,8 @@ function makeEditor(card, res){
 
   const build=()=>{
     const items=[];
-    for(const b of res.boxes) items.push({no:b.no,color:b.color,l:b.l,w:b.w,h:b.h,m3:b.m3||0,factor:b.factor||0,placed:true,x:b.x,y:b.y,z:b.z,layer:b.layer||0});
-    for(const u of (res.unplaced||[])) items.push({no:u.no,color:u.color,l:u.l,w:u.w,h:u.h,m3:u.m3||0,factor:u.factor||0,placed:false,x:0,y:0,z:UNDERLAY_H,layer:0});
+    for(const b of res.boxes) items.push({no:b.no,color:b.color,l:b.l,w:b.w,h:b.h,m3:b.m3||0,factor:b.factor||0,brd:b.brd||null,placed:true,x:b.x,y:b.y,z:b.z,layer:b.layer||0});
+    for(const u of (res.unplaced||[])) items.push({no:u.no,color:u.color,l:u.l,w:u.w,h:u.h,m3:u.m3||0,factor:u.factor||0,brd:u.brd||null,placed:false,x:0,y:0,z:UNDERLAY_H,layer:0});
     return items;
   };
   const ed={ card, floor, stage, info, side, items:build(), draw, stackZ };
@@ -1433,7 +1457,7 @@ function makeEditor(card, res){
       `<span>${axStr}</span>`+
       (tooHigh?`<span class="bad">Höhe über 2,80 m!</span>`:'');
     if(side){
-      const pseudo={boxes:placed.map(i=>({no:i.no,color:i.color,x:i.x,y:i.y,z:i.z,l:i.l,w:i.w,h:i.h})), underlays:[]};
+      const pseudo={boxes:placed.map(i=>({no:i.no,color:i.color,x:i.x,y:i.y,z:i.z,l:i.l,w:i.w,h:i.h,brd:i.brd||null})), underlays:[]};
       for(const i of placed) pseudo.underlays.push({x:i.x,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN},{x:i.x+i.l-UNDERLAY_LEN,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN});
       side.innerHTML=renderSide(pseudo);
     }
@@ -1785,8 +1809,12 @@ function parseSawmillLines(lines){
         // Lattenhöhe: S<nn> -> nn mm, OL (ohne Latten) -> 0, sonst 18 mm Vorgabe
         const sticker=stk?+stk[1]:(noSlat?0:UNDERLAY_STICKER);
         const m3=per*B*H*L/1e9;
+        // Brett-/Latten-Aufbau je Paket für die Visualisierung merken:
+        //   ac = Bretter quer (Breite), hi = Brettlagen (Höhe),
+        //   bb/bh = Brett-Querschnitt, st = Zwischenlattenhöhe
         found.push({ no:`${B}x${H}x${L}`, l:L, w:across*H, h:high*B+(high-1)*sticker,
-                     m3:+m3.toFixed(3), n:anzahl, cat:'hg' });
+                     m3:+m3.toFixed(3), n:anzahl, cat:'hg',
+                     brd:{ac:across, hi:high, bb:B, bh:H, st:sticker} });
       }
     }
   }

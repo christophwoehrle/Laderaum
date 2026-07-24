@@ -101,6 +101,11 @@ Gewicht = Volumen × Faktor (kg/m³)
   zu groß für den Laderaum (inkl. überschrittenem Maß), kein Platz auf der
   Ladefläche, Maximalgewicht (24 t) oder Maximalvolumen (90 m³) erreicht.
 - Responsive **Seitenansicht** (mit Rädern) und **Draufsicht** (ohne Räder).
+- **Bretter- und Latten-Darstellung**: Stammt ein Paket aus dem PDF-Import
+  (oder ist der Aufbau hinterlegt), werden die einzelnen Bretter und die
+  Zwischenlatten gezeichnet – in der Seitenansicht die Brettlagen mit den
+  Latten dazwischen, in der Draufsicht die nebeneinander liegenden Bretter
+  (breit × hoch, Brett-Querschnitt und Lattenhöhe aus dem Auftrag).
 - **Manuelle Anordnung** (Drag & Drop, Draufsicht): Pakete lassen sich frei
   greifen und verschieben, in die **Ablage „neben dem LKW"** ziehen (entfernen)
   und von dort wieder platzieren; ein Paket auf ein anderes ziehen stapelt es.
