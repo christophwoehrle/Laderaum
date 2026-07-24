@@ -267,6 +267,7 @@
 
     <div class="toolbar">
       <button class="btn btn-ghost" id="addRow">＋ Paket hinzufügen</button>
+      <button class="btn btn-ghost" id="clearRows" type="button" title="Alle Paketzeilen löschen (neuer Auftrag)">🗑 Alle löschen</button>
       <label class="btn btn-ghost" for="pdfInput" style="margin:0">📄 Import aus PDF</label>
       <input id="pdfInput" type="file" accept="application/pdf" style="display:none">
       <button class="btn btn-ghost" id="btnExport" type="button" title="Auftrag als Datei speichern">💾 Auftrag speichern</button>
@@ -389,6 +390,15 @@ function recolor(){
 }
 
 document.getElementById('addRow').addEventListener('click',()=>{ addRow(); recolor(); });
+
+// Alle Paketzeilen löschen (neuer Auftrag) – eine leere Zeile bleibt zum Erfassen
+document.getElementById('clearRows').addEventListener('click',()=>{
+  if(!rowsEl.querySelector('tr')) return;
+  if(!confirm('Alle Paketzeilen löschen?')) return;
+  rowsEl.innerHTML=''; rowSeq=0;
+  addRow(); recolor(); saveLocal();
+  document.getElementById('ioStatus').textContent='Alle Pakete gelöscht.';
+});
 
 // Datum: min = heute
 (function initDate(){

@@ -82,6 +82,9 @@ Gewicht = Volumen × Faktor (kg/m³)
   Sägewerks-Format erkannt, greift ein generischer L×B×H-Fallback.
   (Nur in der Standalone-`index.html`/auf der gehosteten Seite – im Artifact
   sind pdf.js/OCR aus Sicherheitsgründen deaktiviert.)
+- **Alle löschen**: leert die Pakettabelle mit einem Klick (nach Rückfrage) –
+  alle Zeilen werden entfernt und eine leere Zeile bleibt zum Erfassen eines
+  neuen Auftrags.
 - **Auftrag speichern / laden**: Eingaben werden automatisch im Browser
   gespeichert (überstehen einen Reload) und lassen sich als JSON-Datei
   exportieren bzw. wieder importieren (Archiv/Weitergabe).
