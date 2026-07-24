@@ -1673,11 +1673,14 @@ if(window.pdfjsLib){
    Einheitliche Parselogik – EGAL welches PDF hochgeladen wird, werden die
    Zeilen immer nach demselben Sägewerks-/AV-Listen-Schema interpretiert:
 
-     Brett  B × H        (z. B. 30x160, 78x78, 78x98)  → Querschnitt eines Bretts
+     Brett  B × H        (z. B. 30x160, 78x78, 28x65)  → Querschnitt eines Bretts.
+                          Stehen zwei Maße in der Zeile (BM roh + B×H fertig),
+                          gilt das fertige Endmaß (das gelieferte Brettmaß).
      Länge  n,nnn        (Meter mit Komma, z. B. 4,500) → L in mm
      Stück  <ganzzahl>   Gesamtstückzahl dieser Länge
      Anzahl breit  hoch  (z. B. 7  23) → Bretter je Paket = breit × hoch
-     Latten S<nn>        Zwischenlattenhöhe in mm (S18 → 18 mm, S12 → 12 mm)
+     Latten S<nn> / OL   Zwischenlattenhöhe in mm (S18 → 18, S12 → 12,
+                          OL „ohne Latten" → 0)
 
    Daraus je Zeile ein oder mehrere Pakete:
      Pakete (n)  = Stück / (breit × hoch)          (0-Stück-Zeilen entfallen)
@@ -1691,14 +1694,17 @@ function parseSawmillLines(lines){
   for(const raw of lines){
     const line=(raw||'').replace(/\s+/g,' ').trim();
     if(!line) continue;
-    // Brett-Querschnitt B×H (mind. 2-stellig -> schließt Notizen wie "25x6mm" aus)
-    const bh=line.match(/\b(\d{2,4})\s*[x×]\s*(\d{2,4})\b/);
-    if(bh) lastBH={B:+bh[1], H:+bh[2]};
+    // Brett-Querschnitt (mind. 2-stellig -> schließt Notizen wie "25x6mm" aus).
+    // Stehen zwei Maßpaare in der Zeile (BM roh + B×H fertig), gilt das LETZTE
+    // (fertiges Endmaß B×H = geliefertes Brettmaß), sonst das einzige.
+    const pairs=[...line.matchAll(/(\d{2,4})\s*[x×]\s*(\d{2,4})/g)];
+    if(pairs.length){ const p=pairs[pairs.length-1]; lastBH={B:+p[1], H:+p[2]}; }
     // Länge (m mit Komma) unmittelbar gefolgt von der Gesamt-Stückzahl,
     // die NICHT Teil einer Brett-Angabe (…x…) sein darf.
     const lm=line.match(/\b(\d{1,2})[.,](\d{3})\s+(\d{1,5})\b(?!\s*[x×])/);
     const bm=line.match(/\b\d{1,2}[.,]0\b\s+(\d{1,3})\s+(\d{1,3})\b/);   // Bretter breit hoch (nach EA n,0)
     const stk=line.match(/\bS(\d{1,2})\b/i);                        // Zwischenlatte S<nn>
+    const noSlat=/\bOL\b/.test(line);                              // OL = ohne Latten
     if(lm && bm && lastBH){
       const L=(+lm[1])*1000+(+lm[2]);
       const stueck=+lm[3];
@@ -1707,7 +1713,8 @@ function parseSawmillLines(lines){
       const anzahl=Math.round(stueck/per);
       if(stueck>0 && per>0 && anzahl>=1){
         const B=lastBH.B, H=lastBH.H;
-        const sticker=stk?+stk[1]:UNDERLAY_STICKER;
+        // Lattenhöhe: S<nn> -> nn mm, OL (ohne Latten) -> 0, sonst 18 mm Vorgabe
+        const sticker=stk?+stk[1]:(noSlat?0:UNDERLAY_STICKER);
         const m3=per*B*H*L/1e9;
         found.push({ no:`${B}x${H}x${L}`, l:L, w:across*H, h:high*B+(high-1)*sticker,
                      m3:+m3.toFixed(3), n:anzahl, cat:'hg' });
