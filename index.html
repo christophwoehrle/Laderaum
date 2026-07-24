@@ -301,6 +301,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
 <script>
 /* =========================================================================
    Konstanten (alle Längen in mm, Gewicht in kg, Volumen in m³)
@@ -1558,6 +1559,110 @@ if(window.pdfjsLib){
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
 
+/* -------------------------------------------------------------------------
+   Einheitliche Parselogik – EGAL welches PDF hochgeladen wird, werden die
+   Zeilen immer nach demselben Sägewerks-/AV-Listen-Schema interpretiert:
+
+     Brett  B × H        (z. B. 30x160, 78x78, 78x98)  → Querschnitt eines Bretts
+     Länge  n,nnn        (Meter mit Komma, z. B. 4,500) → L in mm
+     Stück  <ganzzahl>   Gesamtstückzahl dieser Länge
+     Anzahl breit  hoch  (z. B. 7  23) → Bretter je Paket = breit × hoch
+     Latten S<nn>        Zwischenlattenhöhe in mm (S18 → 18 mm, S12 → 12 mm)
+
+   Daraus je Zeile ein oder mehrere Pakete:
+     Pakete (n)  = Stück / (breit × hoch)          (0-Stück-Zeilen entfallen)
+     Paketlänge  = L
+     Paketbreite = breit × Brett-H
+     Pakethöhe   = hoch × Brett-B + (hoch-1) × Latten
+     m³ netto    = (breit × hoch) × Brett-B × Brett-H × L / 1e9   (je Paket)
+   ------------------------------------------------------------------------- */
+function parseSawmillLines(lines){
+  const found=[]; let lastBH=null;
+  for(const raw of lines){
+    const line=(raw||'').replace(/\s+/g,' ').trim();
+    if(!line) continue;
+    // Brett-Querschnitt B×H (mind. 2-stellig -> schließt Notizen wie "25x6mm" aus)
+    const bh=line.match(/\b(\d{2,4})\s*[x×]\s*(\d{2,4})\b/);
+    if(bh) lastBH={B:+bh[1], H:+bh[2]};
+    // Länge (m mit Komma) unmittelbar gefolgt von der Gesamt-Stückzahl,
+    // die NICHT Teil einer Brett-Angabe (…x…) sein darf.
+    const lm=line.match(/\b(\d{1,2})[.,](\d{3})\s+(\d{1,5})\b(?!\s*[x×])/);
+    const bm=line.match(/\b\d[.,]0\b\s+(\d{1,3})\s+(\d{1,3})\b/);   // Bretter breit hoch
+    const stk=line.match(/\bS(\d{1,2})\b/i);                        // Zwischenlatte S<nn>
+    if(lm && bm && lastBH){
+      const L=(+lm[1])*1000+(+lm[2]);
+      const stueck=+lm[3];
+      const across=+bm[1], high=+bm[2];
+      const per=across*high;
+      const anzahl=Math.round(stueck/per);
+      if(stueck>0 && per>0 && anzahl>=1){
+        const B=lastBH.B, H=lastBH.H;
+        const sticker=stk?+stk[1]:UNDERLAY_STICKER;
+        const m3=per*B*H*L/1e9;
+        found.push({ no:`${B}x${H}x${L}`, l:L, w:across*H, h:high*B+(high-1)*sticker,
+                     m3:+m3.toFixed(3), n:anzahl, cat:'hg' });
+      }
+    }
+  }
+  return found;
+}
+
+// Generischer Fallback: freies L × B × H (+ optionale Stückzahl)
+function parseGenericLines(lines){
+  const found=[];
+  for(const line of lines){
+    const local=/(\d{2,5})\s*[x×\*]\s*(\d{2,5})\s*[x×\*]\s*(\d{2,5})/g; let m;
+    while((m=local.exec(line))){
+      let n=1; const rest=line.replace(m[0],' ');
+      const mN=rest.match(/(\d{1,4})\s*(?:stk|stück|st\.|pakete?|pcs?)\b/i)||rest.match(/\b(?:anz\.?|menge)\s*[:]?\s*(\d{1,4})/i);
+      if(mN) n=+mN[1];
+      found.push({no:`P${found.length+1}`, l:+m[1], w:+m[2], h:+m[3], n, cat:'hg'});
+    }
+  }
+  return found;
+}
+
+// Kopfdaten (Auftrags-/AV-Nr., Datum) aus dem gesamten Text übernehmen
+function applyPdfHeader(full){
+  const mAV=full.match(/AV[\s\-]*Liste[\s\-]*(?:Nr\.?)?\s*[:#]?\s*([0-9]{2,4}-[0-9]+)/i);
+  const mA = mAV || full.match(/Auftrag[s\-\.]*(?:nummer|nr\.?)?\s*[:#]?\s*([A-Za-z0-9\-\/]+)/i);
+  if(mA) document.getElementById('auftrag').value=mA[1];
+  const mD=full.match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})/);
+  if(mD){
+    let [_,d,mo,yr]=mD; if(yr.length===2) yr='20'+yr;
+    const iso=`${yr.padStart(4,'0')}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
+    if(!isNaN(Date.parse(iso))) document.getElementById('datum').value=iso;
+  }
+}
+
+// pdf.js-Textinhalt einer Seite -> Zeilen (nach Y-Position gruppiert)
+function itemsToLines(items){
+  const byLine={};
+  for(const it of items){
+    const y=Math.round(it.transform[5]);
+    (byLine[y]=byLine[y]||[]).push(it.str);
+  }
+  return Object.keys(byLine).sort((a,b)=>b-a).map(y=>byLine[y].join(' '));
+}
+
+// OCR (Tesseract.js) für gescannte PDFs ohne Textebene: Seiten rendern,
+// Text erkennen und in dieselbe Parselogik geben.
+async function ocrPdfToLines(pdf, status){
+  if(!window.Tesseract) throw new Error('OCR-Bibliothek (Tesseract.js) nicht geladen.');
+  const lines=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    status.textContent=`Gescanntes PDF – Texterkennung (OCR) Seite ${p}/${pdf.numPages} …`;
+    const page=await pdf.getPage(p);
+    const viewport=page.getViewport({scale:2.5});   // höhere Auflösung = bessere OCR
+    const canvas=document.createElement('canvas');
+    canvas.width=viewport.width; canvas.height=viewport.height;
+    await page.render({canvasContext:canvas.getContext('2d'), viewport}).promise;
+    const {data}=await Tesseract.recognize(canvas,'deu');
+    (data.text||'').split(/\r?\n/).forEach(l=>{ if(l.trim()) lines.push(l); });
+  }
+  return lines;
+}
+
 document.getElementById('pdfInput').addEventListener('change', async (e)=>{
   const file=e.target.files[0];
   if(!file) return;
@@ -1571,61 +1676,36 @@ document.getElementById('pdfInput').addEventListener('change', async (e)=>{
     for(let p=1;p<=pdf.numPages;p++){
       const page=await pdf.getPage(p);
       const tc=await page.getTextContent();
-      // Items nach Y-Position zu Zeilen gruppieren
-      const byLine={};
-      for(const it of tc.items){
-        const y=Math.round(it.transform[5]);
-        (byLine[y]=byLine[y]||[]).push(it.str);
-      }
-      Object.keys(byLine).sort((a,b)=>b-a).forEach(y=>lines.push(byLine[y].join(' ')));
+      lines.push(...itemsToLines(tc.items));
     }
+
+    // Textebene zu dünn (gescanntes PDF)? -> OCR auf dieselbe Logik anwenden.
+    const textChars=lines.join('').replace(/\s/g,'').length;
+    let ocrUsed=false;
+    if(textChars<20){
+      if(window.Tesseract){
+        lines=await ocrPdfToLines(pdf, status);
+        ocrUsed=true;
+      }else{
+        status.textContent='PDF ist ein Scan ohne Textebene und OCR ist nicht geladen (Internetverbindung?).';
+        return;
+      }
+    }
+
     const full=lines.join('\n');
+    applyPdfHeader(full);
 
-    // Auftragsnummer (AV-Liste bevorzugt) / Datum
-    const mAV=full.match(/AV[\s\-]*Liste[\s\-]*(?:Nr\.?)?\s*[:#]?\s*([0-9]{2,4}-[0-9]+)/i);
-    const mA = mAV || full.match(/Auftrag[s\-\.]*(?:nummer|nr\.?)?\s*[:#]?\s*([A-Za-z0-9\-\/]+)/i);
-    if(mA) document.getElementById('auftrag').value=mA[1];
-    const mD=full.match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})/);
-    if(mD){
-      let [_,d,mo,yr]=mD; if(yr.length===2) yr='20'+yr;
-      const iso=`${yr.padStart(4,'0')}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
-      if(!isNaN(Date.parse(iso))) document.getElementById('datum').value=iso;
-    }
-
-    // 1) Sägewerks-/AV-Listen-Format: B×H (Brett), Länge in m, Bretter breit×hoch,
-    //    Zwischenlatten 18 mm, m³ netto -> Paket L×B×H + m³
-    const found=[]; let lastBH=null;
-    for(const line of lines){
-      const bh=line.match(/(\d{1,4})\s*[x×]\s*(\d{1,4})/);
-      if(bh) lastBH={B:+bh[1], H:+bh[2]};
-      const lm=line.match(/\b(\d{1,2})[.,](\d{3})\b/);              // Länge in m
-      const bm=line.match(/\b\d[.,]0\b\s+(\d{1,3})\s+(\d{1,3})\b/);  // BM 1,0  breit hoch
-      const m3m=line.match(/S18\s+HW\s*K?\s*(\d{1,3}[.,]\d{3})/i);   // m³ netto nach S18 HW
-      if(lm && bm && m3m && lastBH){
-        const L=(+lm[1])*1000+(+lm[2]);
-        const across=+bm[1], high=+bm[2], B=lastBH.B, H=lastBH.H;
-        found.push({ no:`${B}x${H}x${L}`, l:L, w:across*H, h:high*B+(high-1)*UNDERLAY_STICKER,
-                     m3:parseFloat(m3m[1].replace(',','.')), n:1, cat:'hg' });
-      }
-    }
-    // 2) Fallback: generisches L×B×H-Format
-    if(!found.length){
-      for(const line of lines){
-        const local=/(\d{2,5})\s*[x×\*]\s*(\d{2,5})\s*[x×\*]\s*(\d{2,5})/g; let m;
-        while((m=local.exec(line))){
-          let n=1; const rest=line.replace(m[0],' ');
-          const mN=rest.match(/(\d{1,4})\s*(?:stk|stück|st\.|pakete?|pcs?)\b/i)||rest.match(/\b(?:anz\.?|menge)\s*[:]?\s*(\d{1,4})/i);
-          if(mN) n=+mN[1];
-          found.push({no:`P${found.length+1}`, l:+m[1], w:+m[2], h:+m[3], n, cat:'hg'});
-        }
-      }
-    }
+    // Immer dieselbe Parselogik – unabhängig von Text-PDF oder OCR:
+    let found=parseSawmillLines(lines);
+    if(!found.length) found=parseGenericLines(lines);
 
     if(found.length){
       rowsEl.innerHTML=''; rowSeq=0;
       found.forEach(f=> addRow(f));
       recolor(); saveLocal();
-      status.textContent=`${found.length} Position(en) aus PDF übernommen – bitte Kategorie prüfen.`;
+      const via=ocrUsed?' (per OCR erkannt)':'';
+      const pk=found.reduce((s,f)=>s+(f.n||1),0);
+      status.textContent=`${found.length} Position(en) / ${pk} Paket(e) aus PDF übernommen${via} – bitte Kategorie prüfen.`;
     }else{
       status.textContent='Keine Positionen im PDF erkannt – bitte manuell erfassen.';
     }

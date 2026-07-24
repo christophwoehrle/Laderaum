@@ -8,8 +8,8 @@ Einhaltung aller Rahmenbedingungen – mit Seitenansicht und Draufsicht.
 ## Nutzung
 
 `index.html` im Browser öffnen – keine Installation nötig.
-Für den PDF-Import und die Visualisierungsschrift wird eine
-Internetverbindung benötigt (pdf.js über CDN).
+Für den PDF-Import wird eine Internetverbindung benötigt
+(pdf.js für Text-PDFs, Tesseract.js für die OCR gescannter PDFs – beide über CDN).
 
 ## Rahmendaten des LKW
 
@@ -58,13 +58,23 @@ Gewicht = Volumen × Faktor (kg/m³)
 - Auftragsnummer und Datum (Kalender, ab tagesaktuellem Datum).
 - Pakettabelle: Paketnr., L × B × H (mm), Anzahl, Kategorie – jede
   Paketnummer erhält eine durchgehend eindeutige Farbe.
-- **Import aus PDF** (best effort): erkennt das Sägewerks-/AV-Listen-Format
-  (Brett B×H, Länge, Bretter breit×hoch, Zwischenlatten S18, m³ netto) und
-  erzeugt daraus je Position ein Paket (Länge; Breite = breit×Brett-H;
-  Höhe = hoch×Brett-B + Latten; m³ netto) inkl. AV-Listen-Nr. als
-  Auftragsnummer. Fällt sonst auf ein generisches L×B×H-Format zurück.
+- **Import aus PDF** (einheitliche Logik – jedes PDF wird gleich behandelt):
+  erkennt das Sägewerks-/AV-Listen-Format und wendet für jede eingelesene
+  Datei dieselbe Parselogik an. Je Längen-Zeile werden erkannt: Brett-
+  Querschnitt **B×H**, **Länge** (m mit Komma), **Gesamt-Stückzahl**,
+  Bretter **breit×hoch** je Paket und **Zwischenlatte S<nn>** (Höhe in mm,
+  z. B. S18→18 mm, S12→12 mm). Daraus werden erzeugt:
+  - **Anzahl Pakete** = Stück ÷ (breit × hoch) – 0-Stück-Zeilen entfallen,
+  - **Länge** = L, **Breite** = breit × Brett-H,
+  - **Höhe** = hoch × Brett-B + (hoch-1) × Latte,
+  - **m³ netto** = (breit × hoch) × Brett-B × Brett-H × L (je Paket).
+
+  Die AV-Listen-Nr. wird als Auftragsnummer übernommen. Ist ein PDF ein
+  **Scan ohne Textebene**, wird automatisch **OCR (Tesseract.js)** angewandt
+  und der erkannte Text durch dieselbe Parselogik geführt. Wird kein
+  Sägewerks-Format erkannt, greift ein generischer L×B×H-Fallback.
   (Nur in der Standalone-`index.html`/auf der gehosteten Seite – im Artifact
-  ist pdf.js aus Sicherheitsgründen deaktiviert.)
+  sind pdf.js/OCR aus Sicherheitsgründen deaktiviert.)
 - **Auftrag speichern / laden**: Eingaben werden automatisch im Browser
   gespeichert (überstehen einen Reload) und lassen sich als JSON-Datei
   exportieren bzw. wieder importieren (Archiv/Weitergabe).
