@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wildrechner – Wareneinsatz &amp; Erlös</title>
+<style>
+  :root{
+    --bg:#0f172a;--panel:#ffffff;--panel-2:#f8fafc;--line:#e2e8f0;
+    --ink:#0f172a;--muted:#64748b;--accent:#2563eb;--accent-d:#1d4ed8;
+    --ok:#16a34a;--warn:#d97706;--err:#dc2626;--radius:12px;
+    --shadow:0 1px 3px rgba(15,23,42,.08),0 8px 24px rgba(15,23,42,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:linear-gradient(180deg,#eef2f7 0%,#e6edf5 100%);
+    color:var(--ink);line-height:1.5;padding:16px;
+  }
+  .wrap{max-width:1000px;margin:0 auto}
+  header.app{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+  header.app .logo{
+    width:46px;height:46px;border-radius:10px;flex:0 0 auto;
+    background:linear-gradient(135deg,#7c3aed,#db2777);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;
+    box-shadow:var(--shadow);
+  }
+  header.app h1{font-size:1.35rem;margin:0;line-height:1.2}
+  header.app p{margin:2px 0 0;color:var(--muted);font-size:.85rem}
+  header.app a.back{margin-left:auto;font-size:.8rem;color:var(--accent);text-decoration:none;font-weight:600}
+  header.app a.back:hover{text-decoration:underline}
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:18px;margin-bottom:16px;
+  }
+  .panel h2{
+    font-size:1rem;margin:0 0 4px;display:flex;align-items:center;gap:8px;
+  }
+  .panel h2 .num{
+    background:var(--accent);color:#fff;width:22px;height:22px;border-radius:50%;
+    display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;flex:0 0 auto;
+  }
+  .panel .sub{color:var(--muted);font-size:.8rem;margin:0 0 14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  .group{margin:16px 0 0}
+  .group > h3{font-size:.85rem;margin:0 0 10px;color:var(--ink);display:flex;align-items:center;gap:8px}
+  .group > h3 .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+  label{display:block;font-size:.76rem;font-weight:600;color:var(--muted);margin-bottom:5px}
+  input{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;
+    font-size:.95rem;background:#fff;color:var(--ink);font-family:inherit;text-align:right;
+    font-variant-numeric:tabular-nums;
+  }
+  input:focus{outline:2px solid rgba(37,99,235,.35);border-color:var(--accent)}
+  .field.ro input, input.ro{background:var(--panel-2);color:var(--muted);font-weight:700;border-style:dashed}
+  .field .unit{font-size:.7rem;color:var(--muted);font-weight:500}
+  .suffix{position:relative}
+  .btn{
+    display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:600;
+    border:none;border-radius:9px;padding:10px 16px;font-size:.9rem;font-family:inherit;
+    transition:transform .05s ease;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:var(--accent-d)}
+  .btn-ghost{background:var(--panel-2);color:var(--ink);border:1px solid var(--line)}
+  .btn-ghost:hover{background:#eef2f7}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:16px}
+  .toolbar .spacer{flex:1 1 auto}
+  .hint{font-size:.75rem;color:var(--muted)}
+  .opt{display:inline-flex;align-items:center;gap:8px;font-size:.82rem;font-weight:600;
+    color:var(--ink);cursor:pointer;user-select:none;padding:8px 12px;border:1px solid var(--line);
+    border-radius:9px;background:var(--panel-2)}
+  .opt input{width:16px;height:16px;margin:0;accent-color:var(--accent);cursor:pointer;flex:0 0 auto}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+  .stat{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .stat .k{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:700}
+  .stat .v{font-size:1.4rem;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+  .stat .sub{font-size:.74rem;color:var(--muted)}
+  .stat.big{grid-column:1/-1}
+  .stat.ok{background:#f0fdf4;border-color:#bbf7d0}
+  .stat.ok .v{color:#166534}
+  .stat.err{background:#fef2f2;border-color:#fecaca}
+  .stat.err .v{color:#991b1b}
+  .stat.accent{background:#eff6ff;border-color:#bfdbfe}
+  .stat.accent .v{color:#1d4ed8}
+  .lines{margin-top:12px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .lines .ln{display:flex;justify-content:space-between;gap:10px;padding:9px 14px;font-size:.86rem;border-top:1px solid var(--line)}
+  .lines .ln:first-child{border-top:none}
+  .lines .ln.tot{background:var(--panel-2);font-weight:700}
+  .lines .ln .lbl{color:var(--muted)}
+  .lines .ln .val{font-variant-numeric:tabular-nums;font-weight:600}
+  .foot{color:var(--muted);font-size:.75rem;text-align:center;margin:10px 0 4px}
+  .printhead{display:none}
+  @media print{
+    body{background:#fff;padding:0;font-size:12px}
+    .wrap{max-width:100%}
+    .no-print{display:none !important}
+    .panel{box-shadow:none;border:1px solid #cbd5e1;break-inside:avoid;margin-bottom:10px}
+    header.app{margin-bottom:8px}
+    input,.field.ro input{border:none;background:transparent;padding:2px 0;text-align:right}
+    .stat,.lines,.group{break-inside:avoid}
+    .printhead{display:block;font-size:.8rem;color:#475569;margin-bottom:8px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="app">
+    <div class="logo">🦌</div>
+    <div>
+      <h1>Wildrechner</h1>
+      <p>Kalkulation: Wareneinsatz (Kosten) und Erlös (Verkauf) – Deckungsbeitrag je Reh</p>
+    </div>
+    <a class="back no-print" href="index.html">← Laderaumoptimierung</a>
+  </header>
+
+  <div class="printhead" id="printHead"></div>
+
+  <!-- ================= EINGABE: WARENEINSATZ ================= -->
+  <section class="panel">
+    <h2><span class="num">1</span>Wareneinsatz · Eingabe (Kosten)</h2>
+    <p class="sub">Alle Kosten der Verarbeitung eines/mehrerer Rehe. Grau hinterlegte Felder werden automatisch berechnet.</p>
+
+    <div class="group">
+      <h3><span class="dot" style="background:#7c3aed"></span>Rohstoff &amp; Pacht</h3>
+      <div class="grid">
+        <div class="field"><label>Pacht (€)</label><input id="pacht" type="number" min="0" step="0.01" value="0"></div>
+        <div class="field"><label>Stück Rehwild</label><input id="stueck" type="number" min="0" step="1" value="1"></div>
+        <div class="field ro"><label>Wildpreis je Stück (€) = Pacht ÷ Stück</label><input id="wildpreis" type="text" readonly tabindex="-1"></div>
+        <div class="field"><label>Fleischpreis Wild (€/kg)</label><input id="fleischKg" type="number" min="0" step="0.01" value="7"></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3><span class="dot" style="background:#db2777"></span>Merguez</h3>
+      <div class="grid">
+        <div class="field"><label>Fleischeinsatz (kg Wild)</label><input id="merguezKg" type="number" min="0" step="0.1" value="0"></div>
+        <div class="field"><label>Herstellung gesamt (€)</label><input id="merguezHerst" type="number" min="0" step="0.01" value="0"></div>
+        <div class="field"><label>Anzahl Würste (Stück)</label><input id="merguezAnz" type="number" min="0" step="1" value="0"></div>
+        <div class="field ro"><label>Kosten gesamt (€) = kg × €/kg + Herstellung</label><input id="merguezKost" type="text" readonly tabindex="-1"></div>
+        <div class="field ro"><label>Kosten je Wurst (€)</label><input id="merguezStk" type="text" readonly tabindex="-1"></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3><span class="dot" style="background:#d97706"></span>Bratwürste</h3>
+      <div class="grid">
+        <div class="field"><label>Fleischeinsatz (kg Wild)</label><input id="bratKg" type="number" min="0" step="0.1" value="0"></div>
+        <div class="field"><label>Herstellung gesamt (€)</label><input id="bratHerst" type="number" min="0" step="0.01" value="0"></div>
+        <div class="field"><label>Anzahl Bratwürste (Stück)</label><input id="bratAnz" type="number" min="0" step="1" value="0"></div>
+        <div class="field ro"><label>Kosten gesamt (€) = kg × €/kg + Herstellung</label><input id="bratKost" type="text" readonly tabindex="-1"></div>
+        <div class="field ro"><label>Kosten je Wurst (€)</label><input id="bratStk" type="text" readonly tabindex="-1"></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3><span class="dot" style="background:#64748b"></span>Sonstiges</h3>
+      <div class="grid">
+        <div class="field"><label>Sonstige Kosten (€)</label><input id="sonstige" type="number" min="0" step="0.01" value="0"></div>
+      </div>
+      <div class="toolbar">
+        <label class="opt" title="Die Pacht wird beim Fleischpreis (€/kg) meist schon berücksichtigt. Nur einschalten, wenn die Pacht zusätzlich als eigener Kostenblock zählen soll.">
+          <input type="checkbox" id="pachtInGesamt"> Pacht zusätzlich in die Gesamtkosten einrechnen
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= AUSGABE: ERLÖS ================= -->
+  <section class="panel">
+    <h2><span class="num">2</span>Erlös · Ausgabe (Verkauf)</h2>
+    <p class="sub">Verkaufsmengen und -preise. Die Stückzahlen der Würste stammen aus der Eingabe oben.</p>
+
+    <div class="group">
+      <h3><span class="dot" style="background:#16a34a"></span>Fleisch (Edelteile)</h3>
+      <div class="grid">
+        <div class="field"><label>Rehrücken (kg)</label><input id="rueckenKg" type="number" min="0" step="0.1" value="0"></div>
+        <div class="field"><label>Preis Rehrücken (€/kg)</label><input id="rueckenPreis" type="number" min="0" step="0.01" value="37"></div>
+        <div class="field ro"><label>Erlös Rehrücken (€)</label><input id="rueckenErl" type="text" readonly tabindex="-1"></div>
+      </div>
+      <div class="grid" style="margin-top:12px">
+        <div class="field"><label>Rehkeule (kg)</label><input id="keuleKg" type="number" min="0" step="0.1" value="0"></div>
+        <div class="field"><label>Preis Rehkeule (€/kg)</label><input id="keulePreis" type="number" min="0" step="0.01" value="30"></div>
+        <div class="field ro"><label>Erlös Rehkeule (€)</label><input id="keuleErl" type="text" readonly tabindex="-1"></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3><span class="dot" style="background:#db2777"></span>Würste</h3>
+      <div class="grid">
+        <div class="field ro"><label>Anzahl Merguez (aus Eingabe)</label><input id="merguezAnz2" type="text" readonly tabindex="-1"></div>
+        <div class="field"><label>Verkaufspreis Merguez (€/Stück)</label><input id="merguezVk" type="number" min="0" step="0.01" value="0"></div>
+        <div class="field ro"><label>Erlös Merguez (€)</label><input id="merguezErl" type="text" readonly tabindex="-1"></div>
+      </div>
+      <div class="grid" style="margin-top:12px">
+        <div class="field ro"><label>Anzahl Bratwürste (aus Eingabe)</label><input id="bratAnz2" type="text" readonly tabindex="-1"></div>
+        <div class="field"><label>Verkaufspreis Bratwurst (€/Stück)</label><input id="bratVk" type="number" min="0" step="0.01" value="0"></div>
+        <div class="field ro"><label>Erlös Bratwürste (€)</label><input id="bratErl" type="text" readonly tabindex="-1"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ERGEBNIS ================= -->
+  <section class="panel">
+    <h2><span class="num">3</span>Ergebnis</h2>
+    <p class="sub">Gegenüberstellung von Erlös und Wareneinsatz.</p>
+
+    <div class="stats">
+      <div class="stat accent"><div class="k">Erlös gesamt</div><div class="v" id="rErloes">–</div><div class="sub">Fleisch + Würste</div></div>
+      <div class="stat"><div class="k">Wareneinsatz gesamt</div><div class="v" id="rKosten">–</div><div class="sub" id="rKostenSub">Kosten Produkte + Sonstiges</div></div>
+      <div class="stat big" id="rDbCard"><div class="k">Deckungsbeitrag (Gewinn/Verlust)</div><div class="v" id="rDb">–</div><div class="sub" id="rMarge">Erlös − Wareneinsatz</div></div>
+    </div>
+
+    <div class="lines" id="breakdown"></div>
+
+    <div class="toolbar no-print">
+      <button class="btn btn-primary" id="btnPdf">📄 Als PDF speichern / drucken</button>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost" id="btnReset" type="button" title="Alle Eingaben zurücksetzen">↺ Zurücksetzen</button>
+    </div>
+    <p class="hint" style="margin-top:8px">„Als PDF speichern" öffnet den Druckdialog des Browsers – dort „Als PDF speichern" wählen. Bedienelemente werden im PDF ausgeblendet. Eingaben bleiben im Browser gespeichert.</p>
+  </section>
+
+  <p class="foot">Wildrechner · Kalkulation Wareneinsatz &amp; Erlös</p>
+</div>
+
+<script>
+/* ---------- Helfer ---------- */
+const $ = id => document.getElementById(id);
+const num = id => { const v = parseFloat(($(id).value+'').replace(',','.')); return isFinite(v) ? v : 0; };
+const eur = n => n.toLocaleString('de-DE',{style:'currency',currency:'EUR'});
+const setOut = (id,val) => { $(id).value = eur(val); };
+
+/* Alle Eingabefelder (für Speichern/Laden/Events) */
+const INPUTS = ['pacht','stueck','fleischKg',
+  'merguezKg','merguezHerst','merguezAnz',
+  'bratKg','bratHerst','bratAnz','sonstige',
+  'rueckenKg','rueckenPreis','keuleKg','keulePreis',
+  'merguezVk','bratVk'];
+
+const LS_KEY = 'wildrechner_v1';
+
+/* ---------- Berechnung ---------- */
+function calc(){
+  const pacht   = num('pacht');
+  const stueck  = num('stueck');
+  const fleisch = num('fleischKg');           // €/kg Wild
+
+  // Wildpreis je Stück
+  const wildpreis = stueck > 0 ? pacht/stueck : 0;
+  $('wildpreis').value = stueck > 0 ? eur(wildpreis) : '–';
+
+  // Merguez
+  const mAnz  = num('merguezAnz');
+  const mKost = num('merguezKg')*fleisch + num('merguezHerst');
+  const mStk  = mAnz > 0 ? mKost/mAnz : 0;
+  setOut('merguezKost', mKost);
+  $('merguezStk').value = mAnz > 0 ? eur(mStk) : '–';
+
+  // Bratwürste
+  const bAnz  = num('bratAnz');
+  const bKost = num('bratKg')*fleisch + num('bratHerst');
+  const bStk  = bAnz > 0 ? bKost/bAnz : 0;
+  setOut('bratKost', bKost);
+  $('bratStk').value = bAnz > 0 ? eur(bStk) : '–';
+
+  const sonstige = num('sonstige');
+  const pachtIn  = $('pachtInGesamt').checked;
+
+  // Wareneinsatz gesamt
+  const kostenProdukte = mKost + bKost;
+  const wareneinsatz   = kostenProdukte + sonstige + (pachtIn ? pacht : 0);
+
+  // Erlös
+  const rErl = num('rueckenKg')*num('rueckenPreis');
+  const kErl = num('keuleKg')*num('keulePreis');
+  setOut('rueckenErl', rErl);
+  setOut('keuleErl', kErl);
+
+  $('merguezAnz2').value = mAnz.toLocaleString('de-DE');
+  $('bratAnz2').value    = bAnz.toLocaleString('de-DE');
+  const mErl = mAnz*num('merguezVk');
+  const bErl = bAnz*num('bratVk');
+  setOut('merguezErl', mErl);
+  setOut('bratErl', bErl);
+
+  const erloes = rErl + kErl + mErl + bErl;
+  const db     = erloes - wareneinsatz;
+  const marge  = erloes > 0 ? db/erloes*100 : 0;
+
+  // Ergebnis-Karten
+  $('rErloes').textContent = eur(erloes);
+  $('rKosten').textContent = eur(wareneinsatz);
+  $('rKostenSub').textContent = 'Produkte ' + eur(kostenProdukte) + ' + Sonstiges'
+      + (pachtIn ? ' + Pacht' : '');
+  $('rDb').textContent = eur(db);
+  $('rMarge').textContent = 'Erlös − Wareneinsatz · Marge '
+      + (erloes>0 ? marge.toLocaleString('de-DE',{maximumFractionDigits:1})+' %' : '–');
+  const card = $('rDbCard');
+  card.classList.toggle('ok',  db >= 0);
+  card.classList.toggle('err', db < 0);
+
+  // Aufstellung
+  const mMarge = (mAnz>0 && num('merguezVk')>0) ? num('merguezVk')-mStk : null;
+  const bMarge = (bAnz>0 && num('bratVk')>0)     ? num('bratVk')-bStk   : null;
+  const rows = [
+    ['Erlös Rehrücken', rErl],
+    ['Erlös Rehkeule', kErl],
+    ['Erlös Merguez ('+mAnz.toLocaleString('de-DE')+' Stk.)', mErl],
+    ['Erlös Bratwürste ('+bAnz.toLocaleString('de-DE')+' Stk.)', bErl],
+    ['= Erlös gesamt', erloes, 'tot'],
+    ['Kosten Merguez', -mKost],
+    ['Kosten Bratwürste', -bKost],
+    ['Sonstige Kosten', -sonstige],
+  ];
+  if(pachtIn) rows.push(['Pacht', -pacht]);
+  rows.push(['= Wareneinsatz gesamt', -wareneinsatz, 'tot']);
+  rows.push(['= Deckungsbeitrag', db, 'tot']);
+  let html='';
+  for(const [lbl,val,cls] of rows){
+    html += `<div class="ln ${cls||''}"><span class="lbl">${lbl}</span><span class="val">${eur(val)}</span></div>`;
+  }
+  // Marge je Wurst als Zusatzinfo
+  if(mMarge!==null) html += `<div class="ln"><span class="lbl">Marge je Merguez (VK − Kosten)</span><span class="val">${eur(mMarge)}</span></div>`;
+  if(bMarge!==null) html += `<div class="ln"><span class="lbl">Marge je Bratwurst (VK − Kosten)</span><span class="val">${eur(bMarge)}</span></div>`;
+  $('breakdown').innerHTML = html;
+
+  save();
+}
+
+/* ---------- Speichern / Laden ---------- */
+let restoring = false;
+function save(){
+  if(restoring) return;
+  const data = {};
+  INPUTS.forEach(id => data[id] = $(id).value);
+  data.pachtInGesamt = $('pachtInGesamt').checked;
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(data)); }catch(e){}
+}
+function restore(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    const data = JSON.parse(raw);
+    restoring = true;
+    INPUTS.forEach(id => { if(data[id]!==undefined) $(id).value = data[id]; });
+    if(data.pachtInGesamt!==undefined) $('pachtInGesamt').checked = data.pachtInGesamt;
+    restoring = false;
+  }catch(e){ restoring = false; }
+}
+
+/* ---------- Events ---------- */
+INPUTS.forEach(id => $(id).addEventListener('input', calc));
+$('pachtInGesamt').addEventListener('change', calc);
+
+$('btnPdf').addEventListener('click', () => {
+  const d = new Date().toLocaleDateString('de-DE',{year:'numeric',month:'2-digit',day:'2-digit'});
+  $('printHead').textContent = 'Wildrechner · Kalkulation vom ' + d;
+  window.print();
+});
+
+$('btnReset').addEventListener('click', () => {
+  if(!confirm('Alle Eingaben zurücksetzen?')) return;
+  try{ localStorage.removeItem(LS_KEY); }catch(e){}
+  location.reload();
+});
+
+/* ---------- Start ---------- */
+restore();
+calc();
+</script>
+</body>
+</html>

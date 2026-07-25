@@ -11,6 +11,10 @@ Einhaltung aller Rahmenbedingungen – mit Seitenansicht und Draufsicht.
 Für den PDF-Import wird eine Internetverbindung benötigt
 (pdf.js für Text-PDFs, Tesseract.js für die OCR gescannter PDFs – beide über CDN).
 
+Im selben Verzeichnis liegt zusätzlich der **Wildrechner** (`wildrechner.html`) –
+ein eigenständiger Kalkulationsrechner für Wildverarbeitung (Wareneinsatz vs.
+Erlös), siehe unten.
+
 ## Rahmendaten des LKW
 
 | Größe | Wert |
@@ -91,17 +95,6 @@ Gewicht = Volumen × Faktor (kg/m³)
 - Optionales **m³-netto-Feld** je Paket (Netto-Holzvolumen): ist es gesetzt,
   bestimmt es das Gewicht (Gewicht = m³ netto × Faktor); der Raumbedarf/die
   90-m³-Grenze bleibt über das Umriss-Volumen L×B×H. Leer = Volumen aus L×B×H.
-- **Wildrechner (Schnellschätzung)**: eigener Bereich für eine schnelle,
-  „wilde" Grobabschätzung **ohne** Packlogik. Menge und Maße (L × B × H,
-  Kategorie, optional m³/Stück) werden frei eingegeben und **live** zu
-  Bruttovolumen (L×B×H), gewichtsrelevantem Netto-Holzvolumen, Gewicht und
-  der **geschätzten LKW-Anzahl** verrechnet – bindend ist die schärfere der
-  beiden Grenzen Volumen (90 m³) bzw. Gewicht (24 t) je Zug. Zusätzlich werden
-  die Ø-Auslastung je LKW (Volumen/Gewicht) als Balken und – bei mehreren
-  Kategorien – eine Aufschlüsselung angezeigt. Über **„Aus Paketen übernehmen"**
-  lassen sich die Zeilen der Pakettabelle direkt übernehmen. Der Wert ist ein
-  Grobwert (reale Packlücken, Unterlagshölzer und Stapelgrenzen bleiben
-  unberücksichtigt); für die exakte Anordnung dient „Beladung optimieren".
 - Kennzahlen: geladene Pakete, Gewicht, Volumen (Raum) inkl. Netto-Holzvolumen,
   Lademeter, Lagen.
 - **Beladeplan drucken / als PDF speichern**: druckoptimierte Ausgabe mit
@@ -178,3 +171,41 @@ Gewicht = Volumen × Faktor (kg/m³)
    nötig nach hinten verschoben. Reicht auch das nicht aus, wird gewarnt.
 6. Reicht ein LKW nicht aus, wird automatisch ein weiterer befüllt (siehe
    „Mehrere LKW automatisch").
+
+## Wildrechner (wildrechner.html)
+
+Eigenständiger Kalkulationsrechner für die Wildverarbeitung – unabhängig von
+der Laderaumoptimierung. `wildrechner.html` im Browser öffnen (keine
+Installation, keine Internetverbindung nötig). Eine Eingabeseite
+(**Wareneinsatz/Kosten**) und eine Ausgabeseite (**Erlös/Verkauf**) stellen
+Kosten und Erlös gegenüber und liefern den **Deckungsbeitrag**. Ausgabe als
+**PDF** über den Druckdialog des Browsers. Eingaben werden automatisch im
+Browser gespeichert.
+
+### Eingabe – Wareneinsatz
+
+- **Pacht (€)** und **Stück Rehwild** → **Wildpreis je Stück** = Pacht ÷ Stück.
+- **Fleischpreis Wild (€/kg)** – Vorgabe 7 €/kg, änderbar.
+- **Merguez** und **Bratwürste** je: Fleischeinsatz (kg Wild), Herstellung
+  gesamt (€), Anzahl Stück → **Kosten gesamt = kg × €/kg + Herstellung** und
+  **Kosten je Wurst** = Kosten ÷ Anzahl.
+- **Sonstige Kosten (€)**.
+- Optionaler Schalter **„Pacht zusätzlich in die Gesamtkosten einrechnen"**:
+  Standard aus, weil der Fleischpreis (€/kg) den Rohstoff bereits abbildet –
+  bei Bedarf einschaltbar, damit die Pacht als eigener Kostenblock zählt.
+- **Wareneinsatz gesamt** = Kosten Merguez + Kosten Bratwürste + Sonstige
+  (+ Pacht, falls der Schalter aktiv ist).
+
+### Ausgabe – Erlös
+
+- **Rehrücken**: kg × Preis (Vorgabe 37 €/kg).
+- **Rehkeule**: kg × Preis (Vorgabe 30 €/kg).
+- **Merguez** und **Bratwürste**: Anzahl (aus der Eingabe) × Verkaufspreis je
+  Stück.
+- **Erlös gesamt** = Summe aller Erlöse.
+
+### Ergebnis
+
+- **Deckungsbeitrag** = Erlös gesamt − Wareneinsatz gesamt (grün = Gewinn,
+  rot = Verlust) samt Marge (%) und einer Aufstellung aller Positionen sowie
+  der Marge je Wurst (Verkaufspreis − Kosten je Wurst).
