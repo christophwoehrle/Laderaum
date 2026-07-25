@@ -91,6 +91,17 @@ Gewicht = Volumen × Faktor (kg/m³)
 - Optionales **m³-netto-Feld** je Paket (Netto-Holzvolumen): ist es gesetzt,
   bestimmt es das Gewicht (Gewicht = m³ netto × Faktor); der Raumbedarf/die
   90-m³-Grenze bleibt über das Umriss-Volumen L×B×H. Leer = Volumen aus L×B×H.
+- **Wildrechner (Schnellschätzung)**: eigener Bereich für eine schnelle,
+  „wilde" Grobabschätzung **ohne** Packlogik. Menge und Maße (L × B × H,
+  Kategorie, optional m³/Stück) werden frei eingegeben und **live** zu
+  Bruttovolumen (L×B×H), gewichtsrelevantem Netto-Holzvolumen, Gewicht und
+  der **geschätzten LKW-Anzahl** verrechnet – bindend ist die schärfere der
+  beiden Grenzen Volumen (90 m³) bzw. Gewicht (24 t) je Zug. Zusätzlich werden
+  die Ø-Auslastung je LKW (Volumen/Gewicht) als Balken und – bei mehreren
+  Kategorien – eine Aufschlüsselung angezeigt. Über **„Aus Paketen übernehmen"**
+  lassen sich die Zeilen der Pakettabelle direkt übernehmen. Der Wert ist ein
+  Grobwert (reale Packlücken, Unterlagshölzer und Stapelgrenzen bleiben
+  unberücksichtigt); für die exakte Anordnung dient „Beladung optimieren".
 - Kennzahlen: geladene Pakete, Gewicht, Volumen (Raum) inkl. Netto-Holzvolumen,
   Lademeter, Lagen.
 - **Beladeplan drucken / als PDF speichern**: druckoptimierte Ausgabe mit
