@@ -64,17 +64,23 @@ Gewicht = Volumen × Faktor (kg/m³)
   und 3D-Ansicht sowie die **frei verschiebbare** Anordnung gibt es je LKW
   nebeneinander; eine Kopfzeile nennt die Gesamtzahl der benötigten LKW.
 - Auftragsnummer und Datum (Kalender, ab tagesaktuellem Datum).
-- Pakettabelle: Paketnr., L × B × H (mm), Anzahl, Kategorie – jede
-  Paketnummer erhält eine durchgehend eindeutige Farbe.
+- Pakettabelle: Paketnr., L × B × H (mm), **Latten** (Auswahl), Anzahl,
+  Kategorie – jede Paketnummer erhält eine durchgehend eindeutige Farbe.
+  Die **Latten-Auswahl** kennt die Sägewerks-Codes (S12, S18, 2LA-12,
+  3LA-18, 8LA-12, 10LA-12, OL, PAPP …); ändert man den Latten-Code, wird
+  die Pakethöhe aus dem hinterlegten Brett-Aufbau neu berechnet.
 - **Import aus PDF** (einheitliche Logik – jedes PDF wird gleich behandelt):
   erkennt das Sägewerks-/AV-Listen-Format und wendet für jede eingelesene
   Datei dieselbe Parselogik an. Je Längen-Zeile werden erkannt: Brett-
   Querschnitt **B×H**, **Länge** (m mit Komma), **Gesamt-Stückzahl**,
-  Bretter **breit×hoch** je Paket und **Zwischenlatte S<nn>** (Höhe in mm,
-  z. B. S18→18 mm, S12→12 mm). Daraus werden erzeugt:
+  Bretter **breit×hoch** je Paket und der **Latten-Code** (S18, S12, OL,
+  2LA-12, 10LA-12, PAPP …). Daraus werden erzeugt:
   - **Anzahl Pakete** = Stück ÷ (breit × hoch) – 0-Stück-Zeilen entfallen,
   - **Länge** = L, **Breite** = breit × Brett-H,
-  - **Höhe** = hoch × Brett-B + (hoch-1) × Latte,
+  - **Höhe** = hoch × Brett-B + ⌊hoch ÷ n⌋ × Lattenstärke, wobei der
+    Latten-Code Intervall **n** (jede n-te Lage) und Stärke bestimmt
+    (S12/S18 = jede Lage 12/18 mm, 2LA-12 = jede 2. Lage 12 mm,
+    OL = jede 8. Lage 12 mm usw.; alles nach einem „." im Code entfällt),
   - **m³ netto** = (Stück ÷ Anzahl) × Brett-B × Brett-H × L (je Paket) –
     bei vollen Bündeln entspricht das breit × hoch, bei Teilbündeln (z. B.
     Handelsware **HA** mit 5 Brettern in einem 3×2-Raster) entsprechend

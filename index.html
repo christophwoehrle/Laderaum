@@ -256,6 +256,7 @@
             <th>Länge (mm)</th>
             <th>Breite (mm) · Vorgabe 1100</th>
             <th>Höhe (mm) · Vorgabe 700</th>
+            <th style="min-width:150px" title="Zwischenlatten laut Auftrag – bestimmt die Latten in der Höhe">Latten</th>
             <th style="width:90px">m³ netto</th>
             <th class="colw">Anzahl</th>
             <th style="min-width:190px">Kategorie</th>
@@ -346,6 +347,63 @@ const CATEGORIES = {
   ha: { label:'Handelsware',            factor:460, ref:52 },
 };
 
+/* Latten-Codes (aus der Sägewerks-Excel „Latten").
+   n = Intervall (in jede n-te Brettlage kommt eine Latte),
+   h = Lattenstärke (mm). Alles nach einem "." im Code wird ignoriert.
+   Beispiele: S12 -> jede Lage 12 mm · 2LA-12 -> jede 2. Lage 12 mm ·
+   OL -> jede 8. Lage 12 mm · 10LA-12 -> jede 10. Lage 12 mm. */
+const LATTEN = {
+  'S12':     {n:1,  h:12},
+  'S18':     {n:1,  h:18},
+  '2LA-12':  {n:2,  h:12},
+  '2LA12':   {n:2,  h:12},
+  '2LA-18':  {n:2,  h:18},
+  '2LA-S12': {n:2,  h:12},
+  'S18-2LA': {n:2,  h:18},
+  '3LA-12':  {n:3,  h:12},
+  '3LA-18':  {n:3,  h:18},
+  '4LA-12':  {n:4,  h:12},
+  '4LA-18':  {n:4,  h:18},
+  '5LA-12':  {n:5,  h:12},
+  '6LA-12':  {n:6,  h:12},
+  '8LA-12':  {n:8,  h:12},
+  '8LA-18':  {n:8,  h:18},
+  '10LA-12': {n:10, h:12},
+  'OL':      {n:8,  h:12},
+  'PAPP':    {n:1,  h:4 },
+};
+// Code normalisieren (Teil vor dem ".", Großschreibung) und nachschlagen.
+// Unbekannte Codes werden generisch geparst (S<h>, <n>LA[-][S]<h>, S<h>-<n>LA).
+function lattenSpec(raw){
+  if(!raw) return {code:'', n:1, h:18};
+  const code=String(raw).split('.')[0].toUpperCase().trim();
+  if(LATTEN[code]) return {code, ...LATTEN[code]};
+  let m;
+  if((m=code.match(/^S(\d{1,2})$/)))                 return {code, n:1, h:+m[1]};
+  if((m=code.match(/^(\d{1,2})LA-?S?(\d{1,2})$/)))   return {code, n:+m[1], h:+m[2]};
+  if((m=code.match(/^S(\d{1,2})-(\d{1,2})LA$/)))     return {code, n:+m[2], h:+m[1]};
+  if(code==='OL')                                     return {code, n:8, h:12};
+  return {code, n:1, h:18};   // Rückfall: wie S18
+}
+// Latten-Anteil an der Pakethöhe: Anzahl Latten × Stärke
+function lattenSlats(hoch, spec){ return Math.max(0, Math.floor(hoch/Math.max(1,spec.n))); }
+function lattenHeight(hoch, brettB, spec){ return hoch*brettB + lattenSlats(hoch,spec)*spec.h; }
+
+// Auswahl-Optionen (Latten) – sortiert, S-Codes zuerst
+function lattenOptions(sel){
+  const order=Object.keys(LATTEN);
+  let opts='';
+  if(sel && !LATTEN[sel]) opts+=`<option value="${esc(sel)}" selected>${esc(sel)}</option>`;
+  for(const code of order){
+    const s=LATTEN[code];
+    const label = code==='OL' ? 'OL – jede 8. Lage 12 mm'
+                : code==='PAPP' ? 'PAPP – jede Lage Pappe 4 mm'
+                : `${code} – jede ${s.n>1?s.n+'. Lage':'Lage'} ${s.h} mm`;
+    opts+=`<option value="${code}" ${code===sel?'selected':''}>${esc(label)}</option>`;
+  }
+  return opts;
+}
+
 const PALETTE = ['#2563eb','#dc2626','#16a34a','#d97706','#7c3aed','#0891b2',
   '#db2777','#65a30d','#ea580c','#4338ca','#0d9488','#b45309','#be123c',
   '#4f46e5','#15803d','#a21caf','#0369a1','#9a3412'];
@@ -376,12 +434,24 @@ function addRow(data={}){
     <td><input type="number" class="f-l" min="1" step="1" value="${data.l ?? ''}" placeholder="Länge eingeben"></td>
     <td><input type="number" class="f-w" min="1" step="1" value="${data.w ?? 1100}" title="Voreingestellt 1100 mm – bei Bedarf ändern"></td>
     <td><input type="number" class="f-h" min="1" step="1" value="${data.h ?? 700}"  title="Voreingestellt 700 mm – bei Bedarf ändern"></td>
+    <td><select class="f-lat" title="Zwischenlatten laut Auftrag – bestimmt die Latten in der Höhe">${lattenOptions(data.lat ?? '')}</select></td>
     <td><input type="number" class="f-m3" min="0" step="0.001" value="${data.m3 ?? ''}" placeholder="optional" title="Netto-Holzvolumen je Paket (bestimmt das Gewicht); leer = aus L×B×H"></td>
     <td><input type="number" class="f-n" min="1" step="1" value="${data.n ?? 1}"></td>
     <td><select class="f-cat">${catOptions(data.cat ?? 'hg')}</select></td>
     <td><span class="swatch" style="background:${color}"></span></td>
     <td><button class="btn btn-danger" title="Zeile löschen">✕</button></td>`;
   tr.querySelector('.btn-danger').addEventListener('click',()=>{ tr.remove(); recolor(); });
+  // Latten-Wechsel: Höhe aus Brett-Aufbau neu berechnen (nur wenn Aufbau bekannt)
+  tr.querySelector('.f-lat').addEventListener('change', ()=>{
+    let brd=null; try{ brd=JSON.parse(tr.dataset.brd||'null'); }catch(e){}
+    if(brd && brd.hi>0 && brd.bb>0){
+      const spec=lattenSpec(tr.querySelector('.f-lat').value);
+      tr.querySelector('.f-h').value = lattenHeight(brd.hi, brd.bb, spec);
+      brd.st=spec.h; brd.every=spec.n; brd.lat=spec.code;
+      tr.dataset.brd = JSON.stringify(brd);
+    }
+    saveLocal();
+  });
   rowsEl.appendChild(tr);
 }
 
@@ -416,7 +486,7 @@ document.getElementById('clearRows').addEventListener('click',()=>{
 /* =========================================================================
    Auftrag speichern / laden (localStorage + Datei-Export/Import)
    ========================================================================= */
-const LS_KEY='laderaum_auftrag_v4';   // v4: Beispielauftrag inkl. Brett-/Latten-Aufbau
+const LS_KEY='laderaum_auftrag_v5';   // v5: Latten-Codes + neue Lattenhöhen-Logik
 let _restoring=false, _saveT=0;
 const val = id => document.getElementById(id).value;
 
@@ -431,6 +501,7 @@ function collectState(){
       w:tr.querySelector('.f-w').value,  h:tr.querySelector('.f-h').value,
       m3:tr.querySelector('.f-m3').value, n:tr.querySelector('.f-n').value,
       cat:tr.querySelector('.f-cat').value,
+      lat:tr.querySelector('.f-lat')?tr.querySelector('.f-lat').value:'',
       brd:tr.dataset.brd||''
     }))
   };
@@ -446,7 +517,7 @@ function applyState(s){
     setIf('axKP',ax.kp); setIf('axAX',ax.ax); setIf('axMaxKP',ax.maxKP);
     setIf('axMaxAX',ax.maxAX); setIf('axLeerKP',ax.leerKP); setIf('axLeerAX',ax.leerAX);
     rowsEl.innerHTML=''; rowSeq=0;
-    for(const r of s.rows){ let brd=null; if(r.brd){ try{ brd=JSON.parse(r.brd); }catch(e){} } addRow({no:r.no, l:r.l, w:r.w, h:r.h, m3:r.m3, n:r.n, cat:r.cat, brd}); }
+    for(const r of s.rows){ let brd=null; if(r.brd){ try{ brd=JSON.parse(r.brd); }catch(e){} } addRow({no:r.no, l:r.l, w:r.w, h:r.h, m3:r.m3, n:r.n, cat:r.cat, lat:r.lat, brd}); }
     if(!s.rows.length) addRow();
     recolor();
   } finally { _restoring=false; }
@@ -486,17 +557,17 @@ if(!restoreLocal()){
   document.getElementById('auftrag').value='2026-2863';
   document.getElementById('datum').value='2026-07-21';
   const ORDER=[
-    {no:'1a·30x160x4500', l:4500, w:1120, h:1086, m3:3.478, cat:'hg', brd:{ac:7, hi:23, bb:30, bh:160, st:18}},
-    {no:'1b·30x160x5000', l:5000, w:1120, h:1086, m3:3.864, cat:'hg', brd:{ac:7, hi:23, bb:30, bh:160, st:18}},
-    {no:'2a·40x60x4000',  l:4000, w:1080, h:1084, m3:3.283, cat:'hg', brd:{ac:18,hi:19, bb:40, bh:60,  st:18}},
-    {no:'2b·40x60x5000',  l:5000, w:1080, h:1084, m3:4.104, cat:'hg', brd:{ac:18,hi:19, bb:40, bh:60,  st:18}},
-    {no:'3·60x100x5000',  l:5000, w:1100, h:1074, m3:4.620, cat:'hg', brd:{ac:11,hi:14, bb:60, bh:100, st:18}},
-    {no:'4·60x280x5000',  l:5000, w:1120, h:1074, m3:4.704, cat:'hg', brd:{ac:4, hi:14, bb:60, bh:280, st:18}},
-    {no:'5a·100x100x3000',l:3000, w:1100, h:1044, m3:2.970, cat:'hg', brd:{ac:11,hi:9,  bb:100,bh:100, st:18}},
-    {no:'5b·100x100x4000',l:4000, w:1100, h:1044, m3:3.960, cat:'hg', brd:{ac:11,hi:9,  bb:100,bh:100, st:18}},
-    {no:'6·100x120x5000', l:5000, w:1080, h:1044, m3:4.860, cat:'hg', brd:{ac:9, hi:9,  bb:100,bh:120, st:18}},
+    {no:'1a·30x160x4500', l:4500, w:1120, h:1104, m3:3.478, cat:'hg', lat:'S18', brd:{ac:7, hi:23, bb:30, bh:160, st:18, every:1, lat:'S18'}},
+    {no:'1b·30x160x5000', l:5000, w:1120, h:1104, m3:3.864, cat:'hg', lat:'S18', brd:{ac:7, hi:23, bb:30, bh:160, st:18, every:1, lat:'S18'}},
+    {no:'2a·40x60x4000',  l:4000, w:1080, h:1102, m3:3.283, cat:'hg', lat:'S18', brd:{ac:18,hi:19, bb:40, bh:60,  st:18, every:1, lat:'S18'}},
+    {no:'2b·40x60x5000',  l:5000, w:1080, h:1102, m3:4.104, cat:'hg', lat:'S18', brd:{ac:18,hi:19, bb:40, bh:60,  st:18, every:1, lat:'S18'}},
+    {no:'3·60x100x5000',  l:5000, w:1100, h:1092, m3:4.620, cat:'hg', lat:'S18', brd:{ac:11,hi:14, bb:60, bh:100, st:18, every:1, lat:'S18'}},
+    {no:'4·60x280x5000',  l:5000, w:1120, h:1092, m3:4.704, cat:'hg', lat:'S18', brd:{ac:4, hi:14, bb:60, bh:280, st:18, every:1, lat:'S18'}},
+    {no:'5a·100x100x3000',l:3000, w:1100, h:1062, m3:2.970, cat:'hg', lat:'S18', brd:{ac:11,hi:9,  bb:100,bh:100, st:18, every:1, lat:'S18'}},
+    {no:'5b·100x100x4000',l:4000, w:1100, h:1062, m3:3.960, cat:'hg', lat:'S18', brd:{ac:11,hi:9,  bb:100,bh:100, st:18, every:1, lat:'S18'}},
+    {no:'6·100x120x5000', l:5000, w:1080, h:1062, m3:4.860, cat:'hg', lat:'S18', brd:{ac:9, hi:9,  bb:100,bh:120, st:18, every:1, lat:'S18'}},
   ];
-  for(const r of ORDER) addRow({no:r.no, l:r.l, w:r.w, h:r.h, m3:r.m3, n:1, cat:r.cat, brd:r.brd});
+  for(const r of ORDER) addRow({no:r.no, l:r.l, w:r.w, h:r.h, m3:r.m3, n:1, cat:r.cat, lat:r.lat, brd:r.brd});
   recolor();
 }
 
@@ -512,12 +583,13 @@ function readPackages(){
     const h = +tr.querySelector('.f-h').value;
     const n = Math.floor(+tr.querySelector('.f-n').value);
     const cat = tr.querySelector('.f-cat').value;
+    const lat = tr.querySelector('.f-lat') ? tr.querySelector('.f-lat').value : '';
     const m3 = +tr.querySelector('.f-m3').value;   // Netto-Holzvolumen je Paket (optional)
     const color = tr.dataset.color;
     if(!l||!w||!h||!n) return; // leere Zeile ignorieren
     if(l<=0||w<=0||h<=0||n<=0){ errors.push(`Paket ${no}: ungültige Werte.`); return; }
     let brd=null; if(tr.dataset.brd){ try{ brd=JSON.parse(tr.dataset.brd); }catch(e){} }
-    list.push({no,l,w,h,n,cat,color,factor:CATEGORIES[cat].factor, m3:(isFinite(m3)&&m3>0)?m3:0, brd});
+    list.push({no,l,w,h,n,cat,lat,color,factor:CATEGORIES[cat].factor, m3:(isFinite(m3)&&m3>0)?m3:0, brd});
   });
   return {list,errors};
 }
@@ -1116,15 +1188,19 @@ function renderSide(res){
   for(const b of boxes){
     s+=`<rect x="${X(b.x)}" y="${Zt(b.z,b.h)}" width="${b.l}" height="${b.h}" rx="6"
          fill="${b.color}" fill-opacity="0.85" stroke="#0f172a" stroke-width="2.5"/>`;
-    // Brett-/Latten-Aufbau: Brettlagen (hi) übereinander, dazwischen Latten (st)
+    // Brett-/Latten-Aufbau: Brettlagen (hi) übereinander; Latten nur in jede
+    // n-te Lage (every) mit Stärke st – konsistent zur Höhenberechnung.
     if(b.brd && b.brd.hi>1 && b.brd.bb>0){
-      const {hi,bb,st}=b.brd; let zc=b.z;
+      const {hi,bb,st}=b.brd; const every=b.brd.every||1;
+      const totalSlats=Math.floor(hi/every); let done=0; let zc=b.z;
       for(let k=0;k<hi;k++){
         zc+=bb;
-        if(k<hi-1){
-          if(st>0) s+=`<rect x="${X(b.x)}" y="${Zt(zc,st)}" width="${b.l}" height="${st}" fill="#b45309" fill-opacity="0.92" stroke="#78350f" stroke-width="1"/>`;
-          else     s+=`<line x1="${X(b.x)}" y1="${Zt(zc,0)}" x2="${X(b.x+b.l)}" y2="${Zt(zc,0)}" stroke="#0f172a" stroke-width="1" stroke-opacity="0.45"/>`;
-          zc+=st;
+        // dünne Trennlinie zwischen den Brettern
+        if(k<hi-1) s+=`<line x1="${X(b.x)}" y1="${Zt(zc,0)}" x2="${X(b.x+b.l)}" y2="${Zt(zc,0)}" stroke="#0f172a" stroke-width="0.8" stroke-opacity="0.35"/>`;
+        // Latte nach jeder n-ten Lage, solange noch welche einzubringen sind
+        if(((k+1)%every)===0 && done<totalSlats && st>0){
+          s+=`<rect x="${X(b.x)}" y="${Zt(zc,st)}" width="${b.l}" height="${st}" fill="#b45309" fill-opacity="0.92" stroke="#78350f" stroke-width="1"/>`;
+          zc+=st; done++;
         }
       }
     }
@@ -1776,15 +1852,16 @@ if(window.pdfjsLib){
      Länge  n,nnn        (Meter mit Komma, z. B. 4,500) → L in mm
      Stück  <ganzzahl>   Gesamtstückzahl dieser Länge
      Anzahl breit  hoch  (z. B. 7  23) → Bretter je Paket = breit × hoch
-     Latten S<nn> / OL   Zwischenlattenhöhe in mm (S18 → 18, S12 → 12,
-                          OL „ohne Latten" → 0)
+     Latten <Code>       Latten-Code laut Excel (S18, S12, OL, 2LA-12,
+                          10LA-12, PAPP …). Intervall n = jede n-te Lage,
+                          Stärke h mm (siehe LATTEN-Tabelle).
 
    Daraus je Zeile ein oder mehrere Pakete:
      Pakete (n)  = Stück / (breit × hoch)          (0-Stück-Zeilen entfallen)
      Paketlänge  = L
      Paketbreite = breit × Brett-H
-     Pakethöhe   = hoch × Brett-B + (hoch-1) × Latten
-     m³ netto    = (breit × hoch) × Brett-B × Brett-H × L / 1e9   (je Paket)
+     Pakethöhe   = hoch × Brett-B + floor(hoch/n) × Lattenstärke
+     m³ netto    = (Stück/Anzahl) × Brett-B × Brett-H × L / 1e9   (je Paket)
    ------------------------------------------------------------------------- */
 function parseSawmillLines(lines){
   const found=[]; let lastBH=null;
@@ -1801,8 +1878,8 @@ function parseSawmillLines(lines){
     const lm=line.match(/\b(\d{1,2})[.,](\d{3})\s+(\d{1,5})\b(?!\s*[x×])/);
     // Bretter breit hoch, angeankert am EA-Wert (Dezimal, z. B. 1,0 · 3,0 · 0,8)
     const bm=line.match(/\b\d{1,2}[.,]\d\b\s+(\d{1,3})\s+(\d{1,3})\b/);
-    const stk=line.match(/\bS(\d{1,2})\b/i);                        // Zwischenlatte S<nn>
-    const noSlat=/\bOL\b/.test(line);                              // OL = ohne Latten
+    // Latten-Code aus der „Latten"-Spalte: S12/S18, OL, PAPP, n LA-h, S18-2LA …
+    const latm=line.match(/\b(\d{1,2}LA-?S?\d{1,2}|S\d{1,2}-\d{1,2}LA|S\d{1,2}|\d{1,2}LA|OL|PAPP)\b/i);
     const artm=line.match(/\b(HW|SW|HA)\b/);                        // Warenart: HW/SW/HA
     if(lm && bm && lastBH){
       const L=(+lm[1])*1000+(+lm[2]);
@@ -1812,8 +1889,9 @@ function parseSawmillLines(lines){
       const anzahl=Math.round(stueck/per);
       if(stueck>0 && per>0 && anzahl>=1){
         const B=lastBH.B, H=lastBH.H;
-        // Lattenhöhe: S<nn> -> nn mm, OL (ohne Latten) -> 0, sonst 18 mm Vorgabe
-        const sticker=stk?+stk[1]:(noSlat?0:UNDERLAY_STICKER);
+        // Latten: Code nachschlagen -> Intervall n (jede n-te Lage) + Stärke h.
+        const spec=lattenSpec(latm?latm[1]:'S18');
+        const height=lattenHeight(high, B, spec);
         // m³ netto je Paket aus der tatsächlichen Bretterzahl je Paket
         // (Stück/Anzahl) – bei vollen Bündeln = breit×hoch, bei Teilbündeln
         // (z. B. Handelsware HA mit 5 Brettern in einem 3×2-Raster) entsprechend weniger.
@@ -1826,10 +1904,10 @@ function parseSawmillLines(lines){
         const no=(isHA?'HA·':'')+`${B}x${H}x${L}`;
         // Brett-/Latten-Aufbau je Paket für die Visualisierung merken:
         //   ac = Bretter quer (Breite), hi = Brettlagen (Höhe),
-        //   bb/bh = Brett-Querschnitt, st = Zwischenlattenhöhe
-        found.push({ no, l:L, w:across*H, h:high*B+(high-1)*sticker,
-                     m3:+m3.toFixed(3), n:anzahl, cat:isHA?'ha':'hg', art,
-                     brd:{ac:across, hi:high, bb:B, bh:H, st:sticker} });
+        //   bb/bh = Brett-Querschnitt, st = Lattenstärke, every = Latten-Intervall
+        found.push({ no, l:L, w:across*H, h:height,
+                     m3:+m3.toFixed(3), n:anzahl, cat:isHA?'ha':'hg', art, lat:spec.code,
+                     brd:{ac:across, hi:high, bb:B, bh:H, st:spec.h, every:spec.n, lat:spec.code} });
       }
     }
   }
