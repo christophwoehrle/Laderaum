@@ -390,6 +390,9 @@ function lattenSpec(raw){
 // Latten-Anteil an der Pakethöhe: Anzahl Latten × Stärke
 function lattenSlats(hoch, spec){ return Math.max(0, Math.floor(hoch/Math.max(1,spec.n))); }
 function lattenHeight(hoch, brettB, spec){ return hoch*brettB + lattenSlats(hoch,spec)*spec.h; }
+// Sichtbare Breite einer Latte von der Seite (quer zur Fahrtrichtung liegend):
+// 12/18 -> 18 mm breit, 18/36 -> 36 mm breit, sonst ~2×Höhe.
+function slatWidth(h){ return h===12?18 : h===18?36 : Math.max(12, Math.round(h*2)); }
 
 // Auswahl-Optionen (Latten) – sortiert, S-Codes zuerst
 function lattenOptions(sel){
@@ -1188,24 +1191,29 @@ function renderSide(res){
   // Pakete (hintere Reihen zuerst zeichnen -> größeres y hinten)
   const boxes=[...res.boxes].sort((a,b)=> b.y-a.y);
   for(const b of boxes){
-    s+=`<rect x="${X(b.x)}" y="${Zt(b.z,b.h)}" width="${b.l}" height="${b.h}" rx="6"
-         fill="${b.color}" fill-opacity="0.85" stroke="#0f172a" stroke-width="2.5"/>`;
-    // Brett-/Latten-Aufbau: Brettlagen (hi) übereinander; Latten nur in jede
-    // n-te Lage (every) mit Stärke st – konsistent zur Höhenberechnung.
-    if(b.brd && b.brd.hi>1 && b.brd.bb>0){
+    // Mit hinterlegtem Brett-/Latten-Aufbau: Brettlagen einzeln zeichnen und
+    // die Latten NUR als Querschnitt von der Seite (schmale gelb-schwarze
+    // Klötzchen über den Auflagern) – eine 12/18er Latte ist 12 mm hoch und
+    // 18 mm breit, läuft also quer zur Fahrtrichtung.
+    if(b.brd && b.brd.hi>=1 && b.brd.bb>0){
       const {hi,bb,st}=b.brd; const every=b.brd.every||1;
-      const totalSlats=Math.floor(hi/every); let done=0; let zc=b.z;
+      const totalSlats=Math.floor(hi/every); const sw=slatWidth(st);
+      const stC=[b.x+UNDERLAY_LEN/2, b.x+b.l-UNDERLAY_LEN/2];   // über den Auflagern
+      if(b.l>6500) stC.splice(1,0,b.x+b.l/2);                    // lange Pakete: mittig zusätzlich
+      let zc=b.z, done=0;
       for(let k=0;k<hi;k++){
+        s+=`<rect x="${X(b.x)}" y="${Zt(zc,bb)}" width="${b.l}" height="${bb}" fill="${b.color}" fill-opacity="0.85" stroke="#0f172a" stroke-width="1"/>`;
         zc+=bb;
-        // dünne Trennlinie zwischen den Brettern
-        if(k<hi-1) s+=`<line x1="${X(b.x)}" y1="${Zt(zc,0)}" x2="${X(b.x+b.l)}" y2="${Zt(zc,0)}" stroke="#0f172a" stroke-width="0.8" stroke-opacity="0.35"/>`;
-        // Latte nach jeder n-ten Lage, solange noch welche einzubringen sind.
-        // Latten werden immer gelb-schwarz dargestellt (Warnfarbe).
         if(((k+1)%every)===0 && done<totalSlats && st>0){
-          s+=`<rect x="${X(b.x)}" y="${Zt(zc,st)}" width="${b.l}" height="${st}" fill="#facc15" fill-opacity="1" stroke="#111827" stroke-width="3"/>`;
+          for(const cx of stC)
+            s+=`<rect x="${X(cx-sw/2)}" y="${Zt(zc,st)}" width="${sw}" height="${st}" fill="#facc15" stroke="#111827" stroke-width="1.5"/>`;
           zc+=st; done++;
         }
       }
+      s+=`<rect x="${X(b.x)}" y="${Zt(b.z,b.h)}" width="${b.l}" height="${b.h}" rx="6" fill="none" stroke="#0f172a" stroke-width="2.5"/>`;
+    } else {
+      s+=`<rect x="${X(b.x)}" y="${Zt(b.z,b.h)}" width="${b.l}" height="${b.h}" rx="6"
+           fill="${b.color}" fill-opacity="0.85" stroke="#0f172a" stroke-width="2.5"/>`;
     }
     if(b.l>700 && b.h>90){
       s+=`<text x="${X(b.x+b.l/2)}" y="${Zt(b.z,b.h)+b.h/2+18}" text-anchor="middle"
