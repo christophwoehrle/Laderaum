@@ -1470,6 +1470,8 @@ function edOverlap(a,b){ return a.x < b.x+b.l-1 && a.x+a.l > b.x+1 && a.y < b.y+
 // Karte gesucht, der Zustand liegt in card._ed – so lassen sich beliebig viele
 // LKW gleichzeitig frei umsortieren, ohne sich gegenseitig zu stören.
 let _drag=null;
+let _editors=[];                                 // alle LKW-Editoren (für LKW-übergreifendes Ziehen)
+function resetAllEditors(){ _editors.forEach(e=>e.rebuild&&e.rebuild()); }
 function makeEditor(card, res){
   const floor=card.querySelector('.ed-floor');
   const stage=card.querySelector('.ed-stage');
@@ -1486,7 +1488,9 @@ function makeEditor(card, res){
     return items;
   };
   const ed={ card, floor, stage, info, side, items:build(), draw, stackZ };
+  ed.rebuild=()=>{ ed.items=build(); draw(); };
   card._ed=ed;
+  _editors.push(ed);
 
   function stackZ(item){
     const others=ed.items.filter(o=>o!==item && o.placed && edOverlap(item,o));
@@ -1554,7 +1558,9 @@ function makeEditor(card, res){
   }
   ed.updateInfo=updateInfo;
 
-  if(resetBtn) resetBtn.addEventListener('click', ()=>{ ed.items=build(); draw(); });
+  // „Auto-Anordnung" stellt die komplette automatische Verteilung über ALLE
+  // LKW wieder her (verhindert Dubletten nach LKW-übergreifendem Verschieben).
+  if(resetBtn) resetBtn.addEventListener('click', ()=>{ resetAllEditors(); });
   // Alle Pakete vom LKW entfernen -> wandern in die Ablage „Neben LKW"
   if(clearBtn) clearBtn.addEventListener('click', ()=>{ ed.items.forEach(it=>{ it.placed=false; it.z=UNDERLAY_H; it.layer=0; }); draw(); });
   draw();
@@ -1582,21 +1588,35 @@ function endDrag(e){
   if(!_drag) return;
   window.removeEventListener('pointermove', onDrag);
   window.removeEventListener('pointerup', endDrag);
-  const ed=_drag.ed, it=ed.items[_drag.idx];
-  const fr=ed.floor.getBoundingClientRect(), sr=ed.stage.getBoundingClientRect();
+  const src=_drag.ed, it=src.items[_drag.idx];
   const cx=e.clientX, cy=e.clientY;
-  const M=60, W=ed.floor.clientWidth, scale=W/(TRUCK.L+2*M);
-  if(cx>=sr.left && cx<=sr.right && cy>=sr.top && cy<=sr.bottom){
-    it.placed=false;                                  // in die Ablage gelegt
-  } else if(cx>=fr.left && cx<=fr.right && cy>=fr.top && cy<=fr.bottom){
-    let x=(cx-_drag.dx-fr.left)/scale - M;
-    let y=(cy-_drag.dy-fr.top)/scale - M;
-    x=Math.max(0, Math.min(TRUCK.L-it.l, x));
-    y=Math.max(0, Math.min(TRUCK.W-it.w, y));
-    it.x=x; it.y=y; it.placed=true; ed.stackZ(it);
-  } // sonst: unverändert
+  // Ziel-LKW bestimmen: über welcher Ladefläche/Ablage liegt der Cursor?
+  // So lässt sich das gesamte Kontingent LKW-übergreifend verteilen –
+  // z. B. ein automatisch auf LKW 2 geladenes Paket per Hand auf LKW 1.
+  let tFloor=null, tStage=null;
+  for(const ed of _editors){
+    const fr=ed.floor.getBoundingClientRect();
+    if(cx>=fr.left&&cx<=fr.right&&cy>=fr.top&&cy<=fr.bottom){ tFloor=ed; break; }
+    const sr=ed.stage.getBoundingClientRect();
+    if(cx>=sr.left&&cx<=sr.right&&cy>=sr.top&&cy<=sr.bottom){ tStage=ed; }
+  }
+  const target=tFloor||tStage;
+  if(target){
+    if(target!==src){ src.items.splice(_drag.idx,1); target.items.push(it); }   // auf anderen LKW übernehmen
+    if(tFloor){
+      const fr=target.floor.getBoundingClientRect();
+      const M=60, W=target.floor.clientWidth, scale=W/(TRUCK.L+2*M);
+      let x=(cx-_drag.dx-fr.left)/scale - M;
+      let y=(cy-_drag.dy-fr.top)/scale - M;
+      x=Math.max(0, Math.min(TRUCK.L-it.l, x));
+      y=Math.max(0, Math.min(TRUCK.W-it.w, y));
+      it.x=x; it.y=y; it.placed=true; target.stackZ(it);
+    } else {
+      it.placed=false; it.z=UNDERLAY_H; it.layer=0;      // in die Ablage
+    }
+  } // sonst: unverändert (Drop außerhalb)
   _drag=null;
-  ed.draw();
+  src.draw(); if(target && target!==src) target.draw();
 }
 
 /* =========================================================================
@@ -1712,7 +1732,7 @@ function truckCardHTML(res, idx, N){
       <div class="c3d-hint">Ziehen zum Drehen · Scrollen zum Zoomen</div>
     </div>`;
 
-  h+=`<div class="view-title no-print"><span>✋ Manuelle Anordnung <small>(ziehen zum Verschieben; in die Ablage ziehen zum Entfernen; auf ein Paket ziehen = stapeln; Länge bleibt fix)</small></span>
+  h+=`<div class="view-title no-print"><span>✋ Manuelle Anordnung <small>(ziehen zum Verschieben; auf einen anderen LKW ziehen = umladen; in die Ablage ziehen zum Entfernen; auf ein Paket ziehen = stapeln; Länge bleibt fix)</small></span>
       <span style="display:inline-flex;gap:8px">
         <button class="btn btn-ghost no-print ed-clear" type="button">🗑 Alle entfernen</button>
         <button class="btn btn-ghost no-print ed-reset" type="button">↺ Auto-Anordnung</button>
@@ -1808,6 +1828,7 @@ function render(trucks){
 
   // Interaktive Teile je LKW-Karte aufbauen
   teardown3D();
+  _editors=[];                       // Editor-Registry für LKW-übergreifendes Ziehen zurücksetzen
   const cards=document.querySelectorAll('#results .truck-card');
   cards.forEach(card=>{
     const res=trucks[+card.dataset.truck];

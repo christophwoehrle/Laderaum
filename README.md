@@ -131,6 +131,12 @@ Gewicht = Volumen × Faktor (kg/m³)
   Seitenansicht; „↺ Auto-Anordnung" stellt die automatische Beladung wieder
   her, „🗑 Alle entfernen" räumt den LKW leer (alle Pakete wandern in die
   Ablage), um von Hand neu zu beladen.
+- **LKW-übergreifend umladen**: Werden mehrere LKW benötigt, steht das
+  gesamte Kontingent zur manuellen Verteilung bereit – ein Paket lässt sich
+  aus der Anordnung eines LKW direkt auf die Ladefläche (oder Ablage) eines
+  anderen LKW ziehen (z. B. ein automatisch auf LKW 2 geladenes Paket per
+  Hand auf LKW 1). „↺ Auto-Anordnung" stellt die komplette automatische
+  Verteilung über alle LKW wieder her.
 - **Frei drehbare 3D-Simulation** der Beladung (eigenständiger Canvas-
   Renderer ohne Fremdbibliothek): Drehen per Maus/Touch, Zoomen per
   Scrollrad, Auto-Rotation und „Ansicht zurücksetzen".
