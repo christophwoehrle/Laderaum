@@ -119,8 +119,10 @@ Gewicht = Volumen × Faktor (kg/m³)
 - **Bretter- und Latten-Darstellung**: Stammt ein Paket aus dem PDF-Import
   (oder ist der Aufbau hinterlegt), werden die einzelnen Bretter und die
   Zwischenlatten gezeichnet – in der Seitenansicht die Brettlagen mit den
-  Latten dazwischen, in der Draufsicht die nebeneinander liegenden Bretter
-  (breit × hoch, Brett-Querschnitt und Lattenhöhe aus dem Auftrag).
+  Latten dazwischen (nur in jede n-te Lage laut Latten-Code), in der
+  Draufsicht die nebeneinander liegenden Bretter. Die **Latten werden immer
+  gelb-schwarz** dargestellt; der **Latten-Code** wird je Paket in der
+  Legende als Badge angezeigt (z. B. „Latten: S18").
 - **Manuelle Anordnung** (Drag & Drop, Draufsicht): Pakete lassen sich frei
   greifen und verschieben, in die **Ablage „neben dem LKW"** ziehen (entfernen)
   und von dort wieder platzieren; ein Paket auf ein anderes ziehen stapelt es.

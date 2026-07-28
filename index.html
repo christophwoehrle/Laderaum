@@ -114,6 +114,8 @@
   .legend .item span.dim{color:var(--muted);font-size:.74rem}
   .ha-badge{display:inline-block;font-size:.66rem;font-weight:700;padding:1px 7px;border-radius:99px;
     background:#fef3c7;color:#92400e;border:1px solid #fde68a;text-transform:uppercase;letter-spacing:.03em}
+  .lat-badge{display:inline-block;font-size:.66rem;font-weight:800;padding:1px 7px;border-radius:5px;
+    background:#facc15;color:#111827;border:1px solid #111827;letter-spacing:.02em}
   .empty{color:var(--muted);text-align:center;padding:30px;font-size:.9rem}
   details.hlp{margin-top:12px;font-size:.82rem}
   details.hlp summary{cursor:pointer;color:var(--accent);font-weight:600}
@@ -1197,9 +1199,10 @@ function renderSide(res){
         zc+=bb;
         // dünne Trennlinie zwischen den Brettern
         if(k<hi-1) s+=`<line x1="${X(b.x)}" y1="${Zt(zc,0)}" x2="${X(b.x+b.l)}" y2="${Zt(zc,0)}" stroke="#0f172a" stroke-width="0.8" stroke-opacity="0.35"/>`;
-        // Latte nach jeder n-ten Lage, solange noch welche einzubringen sind
+        // Latte nach jeder n-ten Lage, solange noch welche einzubringen sind.
+        // Latten werden immer gelb-schwarz dargestellt (Warnfarbe).
         if(((k+1)%every)===0 && done<totalSlats && st>0){
-          s+=`<rect x="${X(b.x)}" y="${Zt(zc,st)}" width="${b.l}" height="${st}" fill="#b45309" fill-opacity="0.92" stroke="#78350f" stroke-width="1"/>`;
+          s+=`<rect x="${X(b.x)}" y="${Zt(zc,st)}" width="${b.l}" height="${st}" fill="#facc15" fill-opacity="1" stroke="#111827" stroke-width="3"/>`;
           zc+=st; done++;
         }
       }
@@ -1721,8 +1724,9 @@ function truckCardHTML(res, idx, N){
   for(const no in seen){
     const b=seen[no];
     const ha = no.startsWith('HA·') ? ' <span class="ha-badge">Handelsware</span>' : '';
+    const lat = (b.brd && b.brd.lat) ? ` <span class="lat-badge">Latten: ${esc(b.brd.lat)}</span>` : '';
     h+=`<div class="item"><span class="swatch" style="background:${b.color}"></span>
-      <b>${esc(no)}</b> <span class="dim">${b.l}×${b.w}×${b.h} mm</span>${ha}</div>`;
+      <b>${esc(no)}</b> <span class="dim">${b.l}×${b.w}×${b.h} mm</span>${lat}${ha}</div>`;
   }
   h+='</div>';
   h+='</div>'; // .truck-card
