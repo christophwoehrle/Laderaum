@@ -112,6 +112,8 @@
     border:1px solid var(--line);border-radius:99px;padding:4px 10px}
   .legend .item b{font-weight:700}
   .legend .item span.dim{color:var(--muted);font-size:.74rem}
+  .ha-badge{display:inline-block;font-size:.66rem;font-weight:700;padding:1px 7px;border-radius:99px;
+    background:#fef3c7;color:#92400e;border:1px solid #fde68a;text-transform:uppercase;letter-spacing:.03em}
   .empty{color:var(--muted);text-align:center;padding:30px;font-size:.9rem}
   details.hlp{margin-top:12px;font-size:.82rem}
   details.hlp summary{cursor:pointer;color:var(--accent);font-weight:600}
@@ -1641,8 +1643,9 @@ function truckCardHTML(res, idx, N){
   for(const b of res.boxes){ if(!seen[b.no]) seen[b.no]=b; }
   for(const no in seen){
     const b=seen[no];
+    const ha = no.startsWith('HA·') ? ' <span class="ha-badge">Handelsware</span>' : '';
     h+=`<div class="item"><span class="swatch" style="background:${b.color}"></span>
-      <b>${esc(no)}</b> <span class="dim">${b.l}×${b.w}×${b.h} mm</span></div>`;
+      <b>${esc(no)}</b> <span class="dim">${b.l}×${b.w}×${b.h} mm</span>${ha}</div>`;
   }
   h+='</div>';
   h+='</div>'; // .truck-card
@@ -1799,6 +1802,7 @@ function parseSawmillLines(lines){
     const bm=line.match(/\b\d{1,2}[.,]\d\b\s+(\d{1,3})\s+(\d{1,3})\b/);
     const stk=line.match(/\bS(\d{1,2})\b/i);                        // Zwischenlatte S<nn>
     const noSlat=/\bOL\b/.test(line);                              // OL = ohne Latten
+    const artm=line.match(/\b(HW|SW|HA)\b/);                        // Warenart: HW/SW/HA
     if(lm && bm && lastBH){
       const L=(+lm[1])*1000+(+lm[2]);
       const stueck=+lm[3];
@@ -1814,11 +1818,14 @@ function parseSawmillLines(lines){
         // (z. B. Handelsware HA mit 5 Brettern in einem 3×2-Raster) entsprechend weniger.
         const perPkg=stueck/anzahl;
         const m3=perPkg*B*H*L/1e9;
+        // Warenart: HA (Handelsware) wird am Paketnamen als solche markiert.
+        const art=artm?artm[1]:'';
+        const no=(art==='HA'?'HA·':'')+`${B}x${H}x${L}`;
         // Brett-/Latten-Aufbau je Paket für die Visualisierung merken:
         //   ac = Bretter quer (Breite), hi = Brettlagen (Höhe),
         //   bb/bh = Brett-Querschnitt, st = Zwischenlattenhöhe
-        found.push({ no:`${B}x${H}x${L}`, l:L, w:across*H, h:high*B+(high-1)*sticker,
-                     m3:+m3.toFixed(3), n:anzahl, cat:'hg',
+        found.push({ no, l:L, w:across*H, h:high*B+(high-1)*sticker,
+                     m3:+m3.toFixed(3), n:anzahl, cat:'hg', art,
                      brd:{ac:across, hi:high, bb:B, bh:H, st:sticker} });
       }
     }

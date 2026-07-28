@@ -78,7 +78,9 @@ Gewicht = Volumen × Faktor (kg/m³)
     bei vollen Bündeln entspricht das breit × hoch, bei Teilbündeln (z. B.
     Handelsware **HA** mit 5 Brettern in einem 3×2-Raster) entsprechend
     weniger. Die Warenart (HW Hobelware, SW Sägeware, HA Handelsware) wird
-    gleich behandelt; die Kategorie/Gewichtsfaktor bitte prüfen.
+    beim Packen gleich behandelt; die Kategorie/Gewichtsfaktor bitte prüfen.
+    **Handelsware (HA)** wird als solche markiert: die Paketnummer bekommt
+    das Präfix „HA·" und in der Legende erscheint ein Badge „Handelsware".
 
   Die AV-Listen-Nr. wird als Auftragsnummer übernommen. Ist ein PDF ein
   **Scan ohne Textebene**, wird automatisch **OCR (Tesseract.js)** angewandt
