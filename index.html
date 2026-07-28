@@ -1,0 +1,2061 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laderaumoptimierung Sattelzug – Tautliner</title>
+<style>
+  :root{
+    --bg:#0f172a;
+    --panel:#ffffff;
+    --panel-2:#f8fafc;
+    --line:#e2e8f0;
+    --ink:#0f172a;
+    --muted:#64748b;
+    --accent:#2563eb;
+    --accent-d:#1d4ed8;
+    --ok:#16a34a;
+    --warn:#d97706;
+    --err:#dc2626;
+    --radius:12px;
+    --shadow:0 1px 3px rgba(15,23,42,.08),0 8px 24px rgba(15,23,42,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:linear-gradient(180deg,#eef2f7 0%,#e6edf5 100%);
+    color:var(--ink);
+    line-height:1.5;
+    padding:16px;
+  }
+  .wrap{max-width:100%;margin:0 auto}
+  header.app{
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    margin-bottom:16px;
+  }
+  header.app .logo{
+    width:46px;height:46px;border-radius:10px;flex:0 0 auto;
+    background:linear-gradient(135deg,var(--accent),#0ea5e9);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;
+    box-shadow:var(--shadow);
+  }
+  header.app h1{font-size:1.35rem;margin:0;line-height:1.2}
+  header.app p{margin:2px 0 0;color:var(--muted);font-size:.85rem}
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:18px;margin-bottom:16px;
+  }
+  .panel h2{
+    font-size:1rem;margin:0 0 14px;display:flex;align-items:center;gap:8px;
+    padding-bottom:10px;border-bottom:1px solid var(--line);
+  }
+  .panel h2 .num{
+    background:var(--accent);color:#fff;width:22px;height:22px;border-radius:50%;
+    display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;flex:0 0 auto;
+  }
+  .grid-order{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+  label{display:block;font-size:.78rem;font-weight:600;color:var(--muted);margin-bottom:5px}
+  input,select{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;
+    font-size:.9rem;background:#fff;color:var(--ink);font-family:inherit;
+  }
+  input:focus,select:focus{outline:2px solid rgba(37,99,235,.35);border-color:var(--accent)}
+  .tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table.pkg{width:100%;border-collapse:collapse;min-width:760px}
+  table.pkg th,table.pkg td{padding:8px 6px;text-align:left;font-size:.85rem}
+  table.pkg th{
+    color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;
+    border-bottom:1px solid var(--line);font-weight:700;
+  }
+  table.pkg td input,table.pkg td select{padding:7px 8px}
+  table.pkg .colw{width:52px}
+  .swatch{width:16px;height:16px;border-radius:4px;display:inline-block;border:1px solid rgba(0,0,0,.15);vertical-align:middle}
+  .btn{
+    display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:600;
+    border:none;border-radius:9px;padding:10px 16px;font-size:.9rem;font-family:inherit;
+    transition:transform .05s ease,box-shadow .1s ease;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:var(--accent-d)}
+  .btn-ghost{background:var(--panel-2);color:var(--ink);border:1px solid var(--line)}
+  .btn-ghost:hover{background:#eef2f7}
+  .btn-danger{background:transparent;color:var(--err);border:1px solid transparent;padding:6px 8px}
+  .btn-danger:hover{background:#fef2f2}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+  .toolbar .spacer{flex:1 1 auto}
+  .hint{font-size:.75rem;color:var(--muted)}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:6px}
+  .stat{
+    background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+  }
+  .stat .k{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:700}
+  .stat .v{font-size:1.35rem;font-weight:700;margin-top:2px}
+  .stat .sub{font-size:.74rem;color:var(--muted)}
+  .bar{height:7px;background:#e5eaf1;border-radius:99px;overflow:hidden;margin-top:8px}
+  .bar > i{display:block;height:100%;border-radius:99px;background:var(--accent)}
+  .bar.warn > i{background:var(--warn)}
+  .bar.err > i{background:var(--err)}
+  .bar.ok > i{background:var(--ok)}
+  .msgs{margin:10px 0 0}
+  .msg{padding:9px 12px;border-radius:8px;font-size:.83rem;margin-bottom:8px;border:1px solid}
+  .msg.warn{background:#fffbeb;border-color:#fde68a;color:#92400e}
+  .msg.err{background:#fef2f2;border-color:#fecaca;color:#991b1b}
+  .msg.ok{background:#f0fdf4;border-color:#bbf7d0;color:#166534}
+  .view-title{font-size:.85rem;font-weight:700;color:var(--muted);margin:4px 0 8px;display:flex;justify-content:space-between;align-items:baseline}
+  .view-title small{font-weight:500}
+  .svg-box{width:100%;border:1px solid var(--line);border-radius:10px;background:#fbfcfe;overflow:hidden}
+  svg{display:block;width:100%;height:auto}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+  .legend .item{display:flex;align-items:center;gap:7px;font-size:.8rem;background:var(--panel-2);
+    border:1px solid var(--line);border-radius:99px;padding:4px 10px}
+  .legend .item b{font-weight:700}
+  .legend .item span.dim{color:var(--muted);font-size:.74rem}
+  .ha-badge{display:inline-block;font-size:.66rem;font-weight:700;padding:1px 7px;border-radius:99px;
+    background:#fef3c7;color:#92400e;border:1px solid #fde68a;text-transform:uppercase;letter-spacing:.03em}
+  .lat-badge{display:inline-block;font-size:.66rem;font-weight:800;padding:1px 7px;border-radius:5px;
+    background:#facc15;color:#111827;border:1px solid #111827;letter-spacing:.02em}
+  .empty{color:var(--muted);text-align:center;padding:30px;font-size:.9rem}
+  details.hlp{margin-top:12px;font-size:.82rem}
+  details.hlp summary{cursor:pointer;color:var(--accent);font-weight:600}
+  details.hlp ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
+  #pdfStatus{font-size:.78rem;color:var(--muted)}
+  .opt{display:inline-flex;align-items:center;gap:8px;font-size:.85rem;font-weight:600;
+    color:var(--ink);cursor:pointer;user-select:none;padding:8px 12px;border:1px solid var(--line);
+    border-radius:9px;background:var(--panel-2)}
+  .opt input{width:16px;height:16px;margin:0;accent-color:var(--accent);cursor:pointer;flex:0 0 auto}
+  .stat.muted .v{color:var(--muted)}
+  .nl-panel{margin-top:14px;border:1px solid #fde68a;background:#fffdf5;border-radius:10px;padding:12px 14px}
+  .nl-panel h3{margin:0 0 10px;font-size:.9rem;color:#92400e;display:flex;align-items:center;gap:8px}
+  .nl-tbl{width:100%;border-collapse:collapse;min-width:560px}
+  .nl-tbl th,.nl-tbl td{text-align:left;padding:7px 8px;font-size:.82rem;border-bottom:1px solid #fde68a}
+  .nl-tbl th{font-size:.7rem;text-transform:uppercase;letter-spacing:.03em;color:#a16207;font-weight:700}
+  .nl-tbl tr:last-child td{border-bottom:none}
+  .nl-tbl td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+  .rtag{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+  .rtag.oversize{background:#fee2e2;color:#991b1b}
+  .rtag.space{background:#e0e7ff;color:#3730a3}
+  .rtag.weight{background:#ffedd5;color:#9a3412}
+  .rtag.volume{background:#dcfce7;color:#166534}
+  .c3d-wrap{position:relative;width:100%;border:1px solid var(--line);border-radius:10px;
+    background:linear-gradient(180deg,#eef4fb 0%,#e2eaf3 100%);overflow:hidden}
+  .c3d{display:block;width:100%;height:auto;touch-action:none;cursor:grab}
+  .c3d:active{cursor:grabbing}
+  .c3d-ctrl{position:absolute;top:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .c3d-ctrl button{font:600 .76rem/1 inherit;padding:7px 10px;border:1px solid var(--line);
+    border-radius:8px;background:rgba(255,255,255,.9);color:var(--ink);cursor:pointer;backdrop-filter:blur(2px)}
+  .c3d-ctrl button:hover{background:#fff}
+  .c3d-ctrl button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .ax-panel{margin-top:14px;border:1px solid var(--line);background:var(--panel-2);border-radius:10px;padding:14px}
+  .ax-panel h3{margin:0 0 4px;font-size:.9rem;display:flex;align-items:center;gap:8px}
+  .ax-panel .axsub{font-size:.75rem;color:var(--muted);margin:0 0 12px}
+  .ax-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .ax-cell .k{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:700}
+  .ax-cell .v{font-size:1.2rem;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+  .ax-cell .sub{font-size:.73rem;color:var(--muted)}
+  .ax-status{display:inline-flex;align-items:center;gap:6px;font-size:.74rem;font-weight:700;padding:3px 9px;border-radius:99px}
+  .ax-status.ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+  .ax-status.bad{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+  .ax-diagram{margin-top:12px;width:100%;overflow:hidden}
+  .c3d-hint{position:absolute;bottom:9px;left:12px;font-size:.74rem;color:#475569;
+    background:rgba(255,255,255,.75);padding:3px 8px;border-radius:6px;pointer-events:none}
+  .ed-wrap{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fbfcfe}
+  .ed-floor{position:relative;width:100%;background:
+      linear-gradient(0deg,#eef4fb,#eef4fb);border-bottom:2px dashed #cbd5e1;touch-action:none}
+  .ed-floor .truck-frame{position:absolute;inset:0;border:2px solid #334155;pointer-events:none}
+  .ed-stage{position:relative;min-height:70px;padding:24px 8px 8px;background:#f1f5f9;touch-action:none}
+  .ed-stage-label{position:absolute;top:5px;left:10px;font-size:.72rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.03em}
+  .ed-pkg{position:absolute;box-sizing:border-box;border:1.5px solid rgba(15,23,42,.55);border-radius:5px;
+    color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;
+    text-align:center;overflow:hidden;cursor:grab;user-select:none;touch-action:none;
+    text-shadow:0 1px 2px rgba(0,0,0,.5);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .ed-pkg.dragging{cursor:grabbing;opacity:.9;box-shadow:0 6px 16px rgba(0,0,0,.35);z-index:999}
+  .ed-pkg .lay{position:absolute;top:1px;right:3px;font-size:9px;opacity:.9}
+  .ed-stage .ed-pkg{position:relative;display:inline-flex;margin:2px;height:34px;min-width:60px}
+  .ed-info{display:flex;flex-wrap:wrap;gap:14px;padding:10px 12px;border-top:1px solid var(--line);font-size:.82rem;background:#fff}
+  .ed-info b{font-variant-numeric:tabular-nums}
+  .ed-info .bad{color:var(--err);font-weight:700}
+  .ed-info .ok{color:var(--ok);font-weight:700}
+  .res-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;
+    margin:0 0 14px;padding-bottom:10px;border-bottom:2px solid var(--line)}
+  .res-head .rh-title{font-size:1.05rem;font-weight:800}
+  .res-head .rh-meta{font-size:.83rem;color:var(--muted);margin-top:2px}
+  .res-head .rh-meta b{color:var(--ink);font-weight:700}
+  /* Mehrere LKW nebeneinander */
+  .trucks-row{display:flex;gap:18px;overflow-x:auto;padding:4px 2px 12px;align-items:flex-start;
+    scroll-snap-type:x proximity}
+  .truck-card{flex:0 0 auto;width:min(720px,92vw);scroll-snap-align:start;
+    border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel-2)}
+  .truck-card > .tc-head{display:flex;align-items:center;gap:10px;margin:0 0 12px;
+    padding-bottom:10px;border-bottom:1px solid var(--line)}
+  .truck-badge{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 12px;
+    border-radius:10px;background:var(--accent);color:#fff;font-weight:800;font-size:.95rem;white-space:nowrap;
+    box-shadow:0 1px 3px rgba(37,99,235,.4)}
+  .truck-card .tc-title{font-weight:800;font-size:.98rem}
+  .truck-card .tc-sub{font-size:.77rem;color:var(--muted);margin-top:1px}
+  .trucks-count{display:inline-flex;align-items:center;gap:7px;font-size:.8rem;font-weight:700;
+    padding:5px 11px;border-radius:99px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe}
+  .truck-card .stats{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
+  .truck-card .view-title{margin-top:14px}
+  @media (max-width:640px){
+    body{padding:10px}
+    .panel{padding:14px}
+    header.app h1{font-size:1.1rem}
+  }
+  @media print{
+    @page{ margin:12mm; }
+    body{background:#fff;padding:0;color:#000}
+    .wrap{max-width:none}
+    header.app, .toolbar, details, .c3d-wrap, .c3d-ctrl, #pdfStatus, .btn, .no-print{display:none !important}
+    section.panel:not(#resultPanel){display:none !important}
+    #resultPanel{border:none;box-shadow:none;padding:0;margin:0}
+    #resultPanel > h2{display:none}
+    .svg-box{border:1px solid #bbb}
+    .view-title{break-after:avoid}
+    .stat,.ax-panel,.nl-panel,.svg-box,.ax-cell{break-inside:avoid}
+    .msg{border:1px solid #bbb}
+    /* Im Druck LKW untereinander statt nebeneinander */
+    .trucks-row{display:block;overflow:visible}
+    .truck-card{width:auto;break-inside:avoid;page-break-inside:avoid;margin-bottom:16px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="app">
+    <div class="logo">🚛</div>
+    <div>
+      <h1>Laderaumoptimierung Sattelzug</h1>
+      <p>Tautliner-Beladung für Holzpakete (Bretter, Latten, Balken) · Lademeter- &amp; Gewichtslogik</p>
+    </div>
+  </header>
+
+  <!-- ORDER -->
+  <section class="panel">
+    <h2><span class="num">1</span>Auftragsdaten</h2>
+    <div class="grid-order">
+      <div>
+        <label for="auftrag">Auftragsnummer</label>
+        <input id="auftrag" type="text" placeholder="z. B. A-2026-0815">
+      </div>
+      <div>
+        <label for="datum">Datum</label>
+        <input id="datum" type="date">
+      </div>
+    </div>
+  </section>
+
+  <!-- PACKAGES -->
+  <section class="panel">
+    <h2><span class="num">2</span>Pakete</h2>
+    <div class="tbl-scroll">
+      <table class="pkg">
+        <thead>
+          <tr>
+            <th style="width:110px">Paketnr.</th>
+            <th>Länge (mm)</th>
+            <th>Breite (mm) · Vorgabe 1100</th>
+            <th>Höhe (mm) · Vorgabe 700</th>
+            <th style="min-width:150px" title="Zwischenlatten laut Auftrag – bestimmt die Latten in der Höhe">Latten</th>
+            <th style="width:90px">m³ netto</th>
+            <th class="colw">Anzahl</th>
+            <th style="min-width:190px">Kategorie</th>
+            <th style="width:70px">Farbe</th>
+            <th style="width:44px"></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn btn-ghost" id="addRow">＋ Paket hinzufügen</button>
+      <button class="btn btn-ghost" id="clearRows" type="button" title="Alle Paketzeilen löschen (neuer Auftrag)">🗑 Alle löschen</button>
+      <label class="btn btn-ghost" for="pdfInput" style="margin:0">📄 Import aus PDF</label>
+      <input id="pdfInput" type="file" accept="application/pdf" style="display:none">
+      <button class="btn btn-ghost" id="btnExport" type="button" title="Auftrag als Datei speichern">💾 Auftrag speichern</button>
+      <label class="btn btn-ghost" for="importInput" style="margin:0" title="Auftrag aus Datei laden">📂 Auftrag laden</label>
+      <input id="importInput" type="file" accept="application/json,.json" style="display:none">
+      <label class="opt" title="Bei deaktiviertem Limit wird das Gewicht berechnet und angezeigt, aber nicht als Beladegrenze angewendet.">
+        <input type="checkbox" id="weightLimit" checked> Maximalgewicht (24 t) berücksichtigen
+      </label>
+      <span id="pdfStatus"></span>
+      <span id="ioStatus" class="hint"></span>
+      <span class="spacer"></span>
+      <button class="btn btn-primary" id="calc">Beladung optimieren →</button>
+    </div>
+
+    <details class="hlp" id="axleCfg">
+      <summary>Achslasten / Fahrzeugdaten (Lastverteilung)</summary>
+      <div class="grid-order" style="margin-top:10px">
+        <div><label for="axKP">Königszapfen ab Stirnwand (mm)</label><input id="axKP" type="number" min="0" step="10" value="1600"></div>
+        <div><label for="axAX">Achsmitte (Aggregat) ab Stirnwand (mm)</label><input id="axAX" type="number" min="0" step="10" value="9300"></div>
+        <div><label for="axMaxKP">max. Sattellast (kg)</label><input id="axMaxKP" type="number" min="0" step="100" value="12000"></div>
+        <div><label for="axMaxAX">max. Achslast Achsaggregat (kg)</label><input id="axMaxAX" type="number" min="0" step="100" value="24000"></div>
+        <div><label for="axLeerKP">Eigengewicht auf Königszapfen (kg)</label><input id="axLeerKP" type="number" min="0" step="100" value="0"></div>
+        <div><label for="axLeerAX">Eigengewicht auf Achsaggregat (kg)</label><input id="axLeerAX" type="number" min="0" step="100" value="0"></div>
+        <div><label for="axMinKP">min. Sattellast (kg)</label><input id="axMinKP" type="number" min="0" step="100" value="0"></div>
+      </div>
+      <p class="hint" style="margin-top:8px">Typische Werte für einen 3-Achs-Sattelauflieger – bitte an das reale Fahrzeug anpassen. Berechnet wird die Verteilung nach dem Hebelgesetz zwischen Königszapfen und Achsaggregat. Optional lässt sich das <b>Eigengewicht (Tara)</b> als Grundlast auf Königszapfen bzw. Achsaggregat angeben – es wird dann zur Nutzlast addiert, sodass die Grenzwerte gegen die Gesamtlast geprüft werden (0 = nur Nutzlast). Über die <b>min. Sattellast</b> lässt sich zusätzlich eine Untergrenze für den Königszapfen festlegen (Traktion/Lenkstabilität) – sie begrenzt den Schwerpunkt nach hinten. Die Beladung beginnt immer bündig an der vorderen Ladewand (kein Leerraum vorne); nur falls die zulässige Sattellast überschritten würde, wird so wenig wie nötig nach hinten verschoben.</p>
+    </details>
+
+    <details class="hlp">
+      <summary>Regeln &amp; Rahmendaten</summary>
+      <ul>
+        <li>Innenraum: 13,50 m × 2,48 m × 2,80 m · Max. Volumen 90 m³ · Max. Gewicht 24 t</li>
+        <li>Alle Maßangaben in mm. Länge bleibt immer parallel zur Fahrtrichtung – kein Drehen, nur längs/quer verschieben.</li>
+        <li>10 mm Abstand in alle Richtungen zwischen den Paketen.</li>
+        <li>Unterlagshölzer (Höhe 72 mm, 2 Stück) unter jedem Paket – auch beim Stapeln.</li>
+        <li>Obere Lagen nur auf vollständig tragender Fläche, kein Überstand in Längsrichtung, kein Schweben. Ein kürzeres (oder gleich langes) Paket gleicher Breite darf auf einem längeren stehen – so wird der Laderaum optimal genutzt.</li>
+        <li>Paket­höhe ≤ 780 mm → maximal 3 Lagen. Gewicht = Volumen × Faktor (kg/m³).</li>
+        <li>Das Maximalgewicht (24 t) lässt sich über den Schalter deaktivieren – dann wird das Gewicht nur berechnet und angezeigt, aber nicht als Beladegrenze angewendet.</li>
+      </ul>
+    </details>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="panel" id="resultPanel">
+    <h2><span class="num">3</span>Beladung / Visualisierung</h2>
+    <div id="results">
+      <div class="empty">Noch keine Berechnung. Pakete eingeben und <b>„Beladung optimieren“</b> klicken.</div>
+    </div>
+  </section>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
+<script>
+/* =========================================================================
+   Konstanten (alle Längen in mm, Gewicht in kg, Volumen in m³)
+   ========================================================================= */
+const TRUCK = { L:13500, W:2480, H:2800 };
+const MAX_VOLUME = 90;        // m³
+const MAX_WEIGHT = 24000;     // kg
+const GAP        = 10;        // mm Abstand ringsum
+const UNDERLAY_H = 72;        // mm Höhe Unterlagsholz
+const UNDERLAY_LEN = 120;     // mm dargestellte Breite eines Unterlagsholzes (in Fahrtrichtung)
+const UNDERLAY_STICKER = 18;  // mm Höhe einer Zwischenlatte (S18) zwischen den Brettlagen
+const MAX_LAYERS_LOW = 3;     // max. Lagen wenn Höhe <= 780
+const LOW_H = 780;
+
+const CATEGORIES = {
+  sf: { label:'Seitenware frisch',      factor:750, ref:32 },
+  sg: { label:'Seitenware getrocknet',  factor:460, ref:52 },
+  hf: { label:'Schnittholz frisch',     factor:570, ref:42 },
+  hg: { label:'Schnittholz getrocknet', factor:460, ref:52 },
+  ha: { label:'Handelsware',            factor:460, ref:52 },
+};
+
+/* Latten-Codes (aus der Sägewerks-Excel „Latten").
+   n = Intervall (in jede n-te Brettlage kommt eine Latte),
+   h = Lattenstärke (mm). Alles nach einem "." im Code wird ignoriert.
+   Beispiele: S12 -> jede Lage 12 mm · 2LA-12 -> jede 2. Lage 12 mm ·
+   OL -> jede 8. Lage 12 mm · 10LA-12 -> jede 10. Lage 12 mm. */
+const LATTEN = {
+  'S12':     {n:1,  h:12},
+  'S18':     {n:1,  h:18},
+  '2LA-12':  {n:2,  h:12},
+  '2LA12':   {n:2,  h:12},
+  '2LA-18':  {n:2,  h:18},
+  '2LA-S12': {n:2,  h:12},
+  'S18-2LA': {n:2,  h:18},
+  '3LA-12':  {n:3,  h:12},
+  '3LA-18':  {n:3,  h:18},
+  '4LA-12':  {n:4,  h:12},
+  '4LA-18':  {n:4,  h:18},
+  '5LA-12':  {n:5,  h:12},
+  '6LA-12':  {n:6,  h:12},
+  '8LA-12':  {n:8,  h:12},
+  '8LA-18':  {n:8,  h:18},
+  '10LA-12': {n:10, h:12},
+  'OL':      {n:8,  h:12},
+  'PAPP':    {n:1,  h:4 },
+};
+// Code normalisieren (Teil vor dem ".", Großschreibung) und nachschlagen.
+// Unbekannte Codes werden generisch geparst (S<h>, <n>LA[-][S]<h>, S<h>-<n>LA).
+function lattenSpec(raw){
+  if(!raw) return {code:'', n:1, h:18};
+  const code=String(raw).split('.')[0].toUpperCase().trim();
+  if(LATTEN[code]) return {code, ...LATTEN[code]};
+  let m;
+  if((m=code.match(/^S(\d{1,2})$/)))                 return {code, n:1, h:+m[1]};
+  if((m=code.match(/^(\d{1,2})LA-?S?(\d{1,2})$/)))   return {code, n:+m[1], h:+m[2]};
+  if((m=code.match(/^S(\d{1,2})-(\d{1,2})LA$/)))     return {code, n:+m[2], h:+m[1]};
+  if(code==='OL')                                     return {code, n:8, h:12};
+  return {code, n:1, h:18};   // Rückfall: wie S18
+}
+// Latten-Anteil an der Pakethöhe: Anzahl Latten × Stärke
+function lattenSlats(hoch, spec){ return Math.max(0, Math.floor(hoch/Math.max(1,spec.n))); }
+function lattenHeight(hoch, brettB, spec){ return hoch*brettB + lattenSlats(hoch,spec)*spec.h; }
+// Sichtbare Breite einer Latte von der Seite (quer zur Fahrtrichtung liegend):
+// 12/18 -> 18 mm breit, 18/36 -> 36 mm breit, sonst ~2×Höhe.
+function slatWidth(h){ return h===12?18 : h===18?36 : Math.max(12, Math.round(h*2)); }
+
+// Auswahl-Optionen (Latten) – sortiert, S-Codes zuerst
+function lattenOptions(sel){
+  const order=Object.keys(LATTEN);
+  let opts='';
+  if(sel && !LATTEN[sel]) opts+=`<option value="${esc(sel)}" selected>${esc(sel)}</option>`;
+  for(const code of order){
+    const s=LATTEN[code];
+    const label = code==='OL' ? 'OL – jede 8. Lage 12 mm'
+                : code==='PAPP' ? 'PAPP – jede Lage Pappe 4 mm'
+                : `${code} – jede ${s.n>1?s.n+'. Lage':'Lage'} ${s.h} mm`;
+    opts+=`<option value="${code}" ${code===sel?'selected':''}>${esc(label)}</option>`;
+  }
+  return opts;
+}
+
+const PALETTE = ['#2563eb','#dc2626','#16a34a','#d97706','#7c3aed','#0891b2',
+  '#db2777','#65a30d','#ea580c','#4338ca','#0d9488','#b45309','#be123c',
+  '#4f46e5','#15803d','#a21caf','#0369a1','#9a3412'];
+
+/* =========================================================================
+   UI: Zeilen
+   ========================================================================= */
+const rowsEl = document.getElementById('rows');
+let rowSeq = 0;
+
+function catOptions(sel){
+  return Object.entries(CATEGORIES).map(([k,c])=>
+    `<option value="${k}" ${k===sel?'selected':''}>${c.label} · ${c.factor} kg/m³</option>`
+  ).join('');
+}
+
+function colorFor(index){ return PALETTE[index % PALETTE.length]; }
+
+function addRow(data={}){
+  const idx = rowSeq++;
+  const color = colorFor(idx);
+  const tr = document.createElement('tr');
+  tr.dataset.color = color;
+  // Brett-/Latten-Aufbau (aus PDF) als Datensatz je Zeile mitführen
+  if(data.brd) tr.dataset.brd = JSON.stringify(data.brd);
+  tr.innerHTML = `
+    <td><input type="text"   class="f-no"    value="${data.no ?? ('P'+(idx+1))}"></td>
+    <td><input type="number" class="f-l" min="1" step="1" value="${data.l ?? ''}" placeholder="Länge eingeben"></td>
+    <td><input type="number" class="f-w" min="1" step="1" value="${data.w ?? 1100}" title="Voreingestellt 1100 mm – bei Bedarf ändern"></td>
+    <td><input type="number" class="f-h" min="1" step="1" value="${data.h ?? 700}"  title="Voreingestellt 700 mm – bei Bedarf ändern"></td>
+    <td><select class="f-lat" title="Zwischenlatten laut Auftrag – bestimmt die Latten in der Höhe">${lattenOptions(data.lat ?? '')}</select></td>
+    <td><input type="number" class="f-m3" min="0" step="0.001" value="${data.m3 ?? ''}" placeholder="optional" title="Netto-Holzvolumen je Paket (bestimmt das Gewicht); leer = aus L×B×H"></td>
+    <td><input type="number" class="f-n" min="1" step="1" value="${data.n ?? 1}"></td>
+    <td><select class="f-cat">${catOptions(data.cat ?? 'hg')}</select></td>
+    <td><span class="swatch" style="background:${color}"></span></td>
+    <td><button class="btn btn-danger" title="Zeile löschen">✕</button></td>`;
+  tr.querySelector('.btn-danger').addEventListener('click',()=>{ tr.remove(); recolor(); });
+  // Latten-Wechsel: Höhe aus Brett-Aufbau neu berechnen (nur wenn Aufbau bekannt)
+  tr.querySelector('.f-lat').addEventListener('change', ()=>{
+    let brd=null; try{ brd=JSON.parse(tr.dataset.brd||'null'); }catch(e){}
+    if(brd && brd.hi>0 && brd.bb>0){
+      const spec=lattenSpec(tr.querySelector('.f-lat').value);
+      tr.querySelector('.f-h').value = lattenHeight(brd.hi, brd.bb, spec);
+      brd.st=spec.h; brd.every=spec.n; brd.lat=spec.code;
+      tr.dataset.brd = JSON.stringify(brd);
+    }
+    saveLocal();
+  });
+  rowsEl.appendChild(tr);
+}
+
+// Farben nach Reihenfolge neu vergeben, damit sie durchgehend eindeutig bleiben
+function recolor(){
+  [...rowsEl.children].forEach((tr,i)=>{
+    const c = colorFor(i);
+    tr.dataset.color = c;
+    tr.querySelector('.swatch').style.background = c;
+  });
+}
+
+document.getElementById('addRow').addEventListener('click',()=>{ addRow(); recolor(); });
+
+// Alle Paketzeilen löschen (neuer Auftrag) – eine leere Zeile bleibt zum Erfassen
+document.getElementById('clearRows').addEventListener('click',()=>{
+  if(!rowsEl.querySelector('tr')) return;
+  if(!confirm('Alle Paketzeilen löschen?')) return;
+  rowsEl.innerHTML=''; rowSeq=0;
+  addRow(); recolor(); saveLocal();
+  document.getElementById('ioStatus').textContent='Alle Pakete gelöscht.';
+});
+
+// Datum: min = heute
+(function initDate(){
+  const d = new Date();
+  const iso = d.toISOString().slice(0,10);
+  const el = document.getElementById('datum');
+  el.min = iso; el.value = iso;
+})();
+
+/* =========================================================================
+   Auftrag speichern / laden (localStorage + Datei-Export/Import)
+   ========================================================================= */
+const LS_KEY='laderaum_auftrag_v5';   // v5: Latten-Codes + neue Lattenhöhen-Logik
+let _restoring=false, _saveT=0;
+const val = id => document.getElementById(id).value;
+
+function collectState(){
+  return {
+    v:1, ts:Date.now(),
+    auftrag: val('auftrag'), datum: val('datum'),
+    weightLimit: document.getElementById('weightLimit').checked,
+    axle:{ kp:val('axKP'), ax:val('axAX'), maxKP:val('axMaxKP'), maxAX:val('axMaxAX'), leerKP:val('axLeerKP'), leerAX:val('axLeerAX') },
+    rows:[...rowsEl.children].map(tr=>({
+      no:tr.querySelector('.f-no').value, l:tr.querySelector('.f-l').value,
+      w:tr.querySelector('.f-w').value,  h:tr.querySelector('.f-h').value,
+      m3:tr.querySelector('.f-m3').value, n:tr.querySelector('.f-n').value,
+      cat:tr.querySelector('.f-cat').value,
+      lat:tr.querySelector('.f-lat')?tr.querySelector('.f-lat').value:'',
+      brd:tr.dataset.brd||''
+    }))
+  };
+}
+function applyState(s){
+  if(!s || !Array.isArray(s.rows)) return false;
+  _restoring=true;
+  try{
+    if(s.auftrag!=null) document.getElementById('auftrag').value=s.auftrag;
+    if(s.datum) document.getElementById('datum').value=s.datum;
+    if(typeof s.weightLimit==='boolean') document.getElementById('weightLimit').checked=s.weightLimit;
+    const ax=s.axle||{}, setIf=(id,v)=>{ if(v!=null && v!=='') document.getElementById(id).value=v; };
+    setIf('axKP',ax.kp); setIf('axAX',ax.ax); setIf('axMaxKP',ax.maxKP);
+    setIf('axMaxAX',ax.maxAX); setIf('axLeerKP',ax.leerKP); setIf('axLeerAX',ax.leerAX);
+    rowsEl.innerHTML=''; rowSeq=0;
+    for(const r of s.rows){ let brd=null; if(r.brd){ try{ brd=JSON.parse(r.brd); }catch(e){} } addRow({no:r.no, l:r.l, w:r.w, h:r.h, m3:r.m3, n:r.n, cat:r.cat, lat:r.lat, brd}); }
+    if(!s.rows.length) addRow();
+    recolor();
+  } finally { _restoring=false; }
+  return true;
+}
+function saveLocal(){ if(_restoring) return; try{ localStorage.setItem(LS_KEY, JSON.stringify(collectState())); }catch(e){} }
+function scheduleSave(){ clearTimeout(_saveT); _saveT=setTimeout(saveLocal, 400); }
+function restoreLocal(){ try{ const raw=localStorage.getItem(LS_KEY); return raw ? applyState(JSON.parse(raw)) : false; }catch(e){ return false; } }
+
+document.addEventListener('input', scheduleSave);
+document.addEventListener('change', scheduleSave);
+
+document.getElementById('btnExport').addEventListener('click', ()=>{
+  const s=collectState();
+  const name=('Auftrag_'+(s.auftrag||'ohne')+'_'+(s.datum||'')+'.json').replace(/[^\w.\-]+/g,'_');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(s,null,2)],{type:'application/json'}));
+  a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  document.getElementById('ioStatus').textContent='Auftrag gespeichert.';
+});
+document.getElementById('importInput').addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{
+      if(applyState(JSON.parse(r.result))){ saveLocal(); document.getElementById('ioStatus').textContent='Auftrag geladen.'; }
+      else document.getElementById('ioStatus').textContent='Ungültige Auftragsdatei.';
+    }catch(err){ document.getElementById('ioStatus').textContent='Datei konnte nicht gelesen werden.'; } };
+  r.readAsText(f); e.target.value='';
+});
+
+// Startzeile(n): zuletzt gespeicherten Auftrag wiederherstellen, sonst Demo
+if(!restoreLocal()){
+  // Beispielauftrag AV-Liste 2026-2863 (Sägewerk Hailfinger) – 9 Produkte / 6 Positionen.
+  // Paketmaße: Breite = Bretter-breit × Brett-H (liegend); Höhe = Bretter-hoch × Brett-B
+  // + Zwischenlatten (18 mm je Lage); m³ = Netto-Holzvolumen laut Auftrag.
+  document.getElementById('auftrag').value='2026-2863';
+  document.getElementById('datum').value='2026-07-21';
+  const ORDER=[
+    {no:'1a·30x160x4500', l:4500, w:1120, h:1104, m3:3.478, cat:'hg', lat:'S18', brd:{ac:7, hi:23, bb:30, bh:160, st:18, every:1, lat:'S18'}},
+    {no:'1b·30x160x5000', l:5000, w:1120, h:1104, m3:3.864, cat:'hg', lat:'S18', brd:{ac:7, hi:23, bb:30, bh:160, st:18, every:1, lat:'S18'}},
+    {no:'2a·40x60x4000',  l:4000, w:1080, h:1102, m3:3.283, cat:'hg', lat:'S18', brd:{ac:18,hi:19, bb:40, bh:60,  st:18, every:1, lat:'S18'}},
+    {no:'2b·40x60x5000',  l:5000, w:1080, h:1102, m3:4.104, cat:'hg', lat:'S18', brd:{ac:18,hi:19, bb:40, bh:60,  st:18, every:1, lat:'S18'}},
+    {no:'3·60x100x5000',  l:5000, w:1100, h:1092, m3:4.620, cat:'hg', lat:'S18', brd:{ac:11,hi:14, bb:60, bh:100, st:18, every:1, lat:'S18'}},
+    {no:'4·60x280x5000',  l:5000, w:1120, h:1092, m3:4.704, cat:'hg', lat:'S18', brd:{ac:4, hi:14, bb:60, bh:280, st:18, every:1, lat:'S18'}},
+    {no:'5a·100x100x3000',l:3000, w:1100, h:1062, m3:2.970, cat:'hg', lat:'S18', brd:{ac:11,hi:9,  bb:100,bh:100, st:18, every:1, lat:'S18'}},
+    {no:'5b·100x100x4000',l:4000, w:1100, h:1062, m3:3.960, cat:'hg', lat:'S18', brd:{ac:11,hi:9,  bb:100,bh:100, st:18, every:1, lat:'S18'}},
+    {no:'6·100x120x5000', l:5000, w:1080, h:1062, m3:4.860, cat:'hg', lat:'S18', brd:{ac:9, hi:9,  bb:100,bh:120, st:18, every:1, lat:'S18'}},
+  ];
+  for(const r of ORDER) addRow({no:r.no, l:r.l, w:r.w, h:r.h, m3:r.m3, n:1, cat:r.cat, lat:r.lat, brd:r.brd});
+  recolor();
+}
+
+/* =========================================================================
+   Eingaben lesen
+   ========================================================================= */
+function readPackages(){
+  const list=[]; const errors=[];
+  [...rowsEl.children].forEach((tr,i)=>{
+    const no  = tr.querySelector('.f-no').value.trim() || ('P'+(i+1));
+    const l = +tr.querySelector('.f-l').value;
+    const w = +tr.querySelector('.f-w').value;
+    const h = +tr.querySelector('.f-h').value;
+    const n = Math.floor(+tr.querySelector('.f-n').value);
+    const cat = tr.querySelector('.f-cat').value;
+    const lat = tr.querySelector('.f-lat') ? tr.querySelector('.f-lat').value : '';
+    const m3 = +tr.querySelector('.f-m3').value;   // Netto-Holzvolumen je Paket (optional)
+    const color = tr.dataset.color;
+    if(!l||!w||!h||!n) return; // leere Zeile ignorieren
+    if(l<=0||w<=0||h<=0||n<=0){ errors.push(`Paket ${no}: ungültige Werte.`); return; }
+    let brd=null; if(tr.dataset.brd){ try{ brd=JSON.parse(tr.dataset.brd); }catch(e){} }
+    list.push({no,l,w,h,n,cat,lat,color,factor:CATEGORIES[cat].factor, m3:(isFinite(m3)&&m3>0)?m3:0, brd});
+  });
+  return {list,errors};
+}
+
+/* =========================================================================
+   Optimierung
+   Achsen: X = Länge (Fahrtrichtung), Y = Breite (quer), Z = Höhe
+   Strategie (Ensemble „beste Variante gewinnt"):
+     1) Säulen bilden – entweder aus gleicher Paketnummer/Maßen oder
+        gemischt (kürzeres/gleich langes Paket auf längerem, gleiche Breite,
+        volle Auflage, kein Überstand); Lagen ≤ Höhenlimit (3 bei Höhe≤780).
+     2) Säulen reihenweise über die Breite packen (mehrere Reihen-Packer).
+     3) Es gewinnt die Kombination mit den meisten geladenen Paketen.
+     4) Emission Lage für Lage unter Beachtung von Gewicht (24 t) und
+        Volumen (90 m³); von unten nach oben.
+     5) Längs-Optimierung der Lastverteilung (Achslasten).
+   ========================================================================= */
+function maxLayers(h){
+  const perLayer = UNDERLAY_H + h;
+  const byHeight = Math.floor(TRUCK.H / perLayer);
+  const cap = (h <= LOW_H) ? Math.min(MAX_LAYERS_LOW, byHeight) : byHeight;
+  return Math.max(0, cap);
+}
+
+/* -------------------------------------------------------------------------
+   Grundflächen-Packung (Achsen: X = Länge, Y = Breite)
+   packFloor() rechnet mehrere Strategien und liefert die Variante mit den
+   meisten geladenen Paketen ("maximale Beladung"). Ein "Plan" besteht aus
+   placements [{s,x,y}], notPlaced [s] und shelves [{y,width,cursorX}].
+   ------------------------------------------------------------------------- */
+
+// Strategie A: gemischte Reihen. Je Reihe den breitesten Stapel setzen
+// (Reihenbreite), Rest kürzeste-zuerst auffüllen (max. Anzahl je Reihe).
+// Stark, wenn schmale Pakete den Restplatz breiter Reihen mitnutzen.
+function planMixedLanes(stacks){
+  const rem = stacks.slice();
+  const placements=[]; const shelves=[]; let nextY=0;
+  while(rem.length){
+    const laneW = Math.max(...rem.map(s=>s.footW));
+    if(nextY + laneW > TRUCK.W + 0.01) break;
+    const wi = rem.findIndex(s=>s.footW >= laneW-0.01);
+    const chosen=[rem[wi]]; let used=rem[wi].footL; rem.splice(wi,1);
+    rem.sort((a,b)=> a.footL-b.footL);
+    for(let i=0;i<rem.length;){
+      if(used + rem[i].footL <= TRUCK.L + 0.01){ used+=rem[i].footL; chosen.push(rem[i]); rem.splice(i,1); }
+      else i++;
+    }
+    let x=0;
+    for(const s of chosen){ placements.push({s,x,y:nextY}); x+=s.footL; }
+    shelves.push({y:nextY, width:laneW, cursorX:used});
+    nextY += laneW;
+  }
+  return {placements, notPlaced:rem, shelves};
+}
+
+// Strategie B: nach Breite gruppierte Reihen. Gleich breite Stapel bilden
+// eigene, exakt passende Reihen (kein Breitenverlust). Anschließend wählt
+// ein Knapsack die Reihen so, dass in die Breite 2,48 m die meisten Pakete
+// passen. Stark, wenn sich Breiten sauber über die Breite aufteilen lassen.
+function planWidthGroups(stacks){
+  const groups=new Map();
+  for(const s of stacks){ if(!groups.has(s.footW)) groups.set(s.footW,[]); groups.get(s.footW).push(s); }
+  // Kandidaten-Reihen je Breitenklasse (kürzeste-zuerst = max. Anzahl/Reihe)
+  const lanes=[];
+  for(const [w, arr] of groups){
+    const items = arr.slice().sort((a,b)=> a.footL-b.footL);
+    while(items.length){
+      const lane={w, items:[], len:0, pkgs:0};
+      for(let i=0;i<items.length;){
+        if(lane.len + items[i].footL <= TRUCK.L + 0.01){
+          lane.len+=items[i].footL; lane.pkgs+=items[i].layers; lane.items.push(items[i]); items.splice(i,1);
+        } else i++;
+      }
+      lanes.push(lane);
+    }
+  }
+  // Knapsack über die Breite (Skalierung /10): max. Pakete
+  const cap=Math.floor(TRUCK.W/10);
+  const wt=lanes.map(l=>Math.ceil(l.w/10));
+  const n=lanes.length;
+  const dp=new Array(cap+1).fill(0);
+  const keep=Array.from({length:n},()=>new Uint8Array(cap+1));
+  for(let i=0;i<n;i++){
+    for(let c=cap;c>=wt[i];c--){
+      const cand=dp[c-wt[i]]+lanes[i].pkgs;
+      if(cand>dp[c]){ dp[c]=cand; keep[i][c]=1; }
+    }
+  }
+  let c=cap; const chosen=[];
+  for(let i=n-1;i>=0;i--){ if(keep[i][c]){ chosen.push(lanes[i]); c-=wt[i]; } }
+  chosen.sort((a,b)=> b.w-a.w);
+  const placements=[]; const shelves=[]; let nextY=0;
+  for(const lane of chosen){
+    let x=0;
+    for(const s of lane.items){ placements.push({s,x,y:nextY}); x+=s.footL; }
+    shelves.push({y:nextY, width:lane.w, cursorX:lane.len});
+    nextY += lane.w;
+  }
+  const placedSet=new Set(placements.map(p=>p.s));
+  const notPlaced=stacks.filter(s=>!placedSet.has(s));
+  return {placements, notPlaced, shelves};
+}
+
+// Strategie C: ausgewogene Reihen (LPT). Gleich breite Stapel bilden eigene
+// Reihen; jeder Stapel kommt längster-zuerst in die Reihe mit dem meisten
+// Restplatz. Das entspricht dem realen Beladen (lange Pakete zuerst hinter
+// die Kabine, kurze dahinter) und füllt die Reihen gleichmäßig dicht –
+// findet z. B. „P2+P1+P1 je Reihe", wo kürzeste-zuerst scheitert.
+function planBalancedLanes(stacks){
+  const groups=new Map();
+  for(const s of stacks){ if(!groups.has(s.footW)) groups.set(s.footW,[]); groups.get(s.footW).push(s); }
+  const widths=[...groups.keys()].sort((a,b)=> b-a);
+  const placements=[]; const shelves=[]; const notPlaced=[];
+  let nextY=0;
+  for(const w of widths){
+    const arr = groups.get(w).slice().sort((a,b)=> b.footL-a.footL); // längster zuerst
+    const maxLanes = Math.floor((TRUCK.W - nextY + 0.01)/w);
+    if(maxLanes<=0){ notPlaced.push(...arr); continue; }
+    const totalLen = arr.reduce((a,s)=> a+s.footL, 0);
+    let K = Math.min(maxLanes, Math.max(1, Math.ceil(totalLen/TRUCK.L)));
+    let lanes, leftover;
+    for(;;){
+      lanes=[]; for(let i=0;i<K;i++) lanes.push({y:nextY+i*w, used:0, items:[]});
+      leftover=[];
+      for(const s of arr){
+        let best=-1, bu=Infinity;
+        for(let i=0;i<lanes.length;i++)
+          if(lanes[i].used + s.footL <= TRUCK.L+0.01 && lanes[i].used < bu){ best=i; bu=lanes[i].used; }
+        if(best<0) leftover.push(s); else { lanes[best].used+=s.footL; lanes[best].items.push(s); }
+      }
+      if(leftover.length===0 || K>=maxLanes) break;
+      K++;                                    // mehr Platz vorhanden -> Reihe ergänzen
+    }
+    for(const lane of lanes){
+      let x=0;
+      for(const s of lane.items){ placements.push({s,x,y:lane.y}); x+=s.footL; }
+      shelves.push({y:lane.y, width:w, cursorX:lane.used});
+    }
+    notPlaced.push(...leftover);
+    nextY += K*w;
+  }
+  return {placements, notPlaced, shelves};
+}
+
+/* -------------------------------------------------------------------------
+   Säulen (Stapel) bilden. Eine Säule ist ein Stapel von Paketen (unten →
+   oben), Grundfläche = unterstes (längstes) Paket. Regeln: gleiche Breite,
+   Länge nach oben nicht zunehmend (volle Auflage, kein Überstand), Höhe/
+   Lagenlimit (≤780 mm → max. 3). Zwei Bildungsarten, siehe packFloor.
+   ------------------------------------------------------------------------- */
+function makeCol(items){
+  const b=items[0];
+  return { items, footL:b.footL, footW:b.footW, l:b.l, w:b.w, layers:items.length };
+}
+function canStack(items, next){
+  // gleiche Breite + Länge nicht größer als das aktuell unterste tragende Paket
+  const bottom=items[items.length-1];
+  if(Math.abs(next.footW-bottom.footW)>0.01) return false;
+  if(next.l > bottom.l + 0.01) return false;
+  const cnt=items.length+1;
+  const allLow = next.h<=LOW_H && items.every(it=>it.h<=LOW_H);
+  if(allLow && cnt>MAX_LAYERS_LOW) return false;
+  let hsum=UNDERLAY_H+next.h; for(const it of items) hsum+=UNDERLAY_H+it.h;
+  return hsum<=TRUCK.H+1e-6;
+}
+// (a) Säulen aus gleicher Paketnummer/Maßen (identische Grundfläche)
+function sameNumberColumns(units){
+  const groups=new Map();
+  for(const u of units){ const k=u.no+'|'+u.l+'|'+u.w+'|'+u.h; (groups.get(k)||groups.set(k,[]).get(k)).push(u); }
+  const cols=[];
+  for(const arr of groups.values()){
+    const cap=Math.max(1, maxLayers(arr[0].h));
+    for(let i=0;i<arr.length;i+=cap) cols.push(makeCol(arr.slice(i,i+cap)));
+  }
+  return cols;
+}
+// (b) Gemischte Säulen je Breitenklasse: längstes zuerst, kürzere darauf
+//     (kürzer-auf-länger, volle Auflage). Minimiert die genutzte Bodenlänge.
+function mixedWidthColumns(units){
+  const groups=new Map();
+  for(const u of units){ if(!groups.has(u.footW)) groups.set(u.footW,[]); groups.get(u.footW).push(u); }
+  const cols=[];
+  for(const arr of groups.values()){
+    const s=arr.slice().sort((a,b)=> b.l-a.l || b.h-a.h); // längstes (dann höchstes) zuerst
+    let i=0;
+    while(i<s.length){
+      const items=[s[i++]];
+      while(i<s.length && canStack(items, s[i])) items.push(s[i++]);
+      cols.push(makeCol(items));
+    }
+  }
+  return cols;
+}
+
+// Säulen-Plan (Stapel an fester x,y) -> Einzelpaket-Platzierungen mit z
+function expandColumnPlan(cp){
+  const placements=[]; const notPlacedU=[];
+  for(const q of cp.placements){
+    let z=0;
+    q.s.items.forEach((it,i)=>{ placements.push({u:it, x:q.x, y:q.y, z:z+UNDERLAY_H, layer:i}); z+=UNDERLAY_H+it.h; });
+  }
+  for(const col of cp.notPlaced) for(const it of col.items) notPlacedU.push(it);
+  return {placements, notPlacedU, shelves:cp.shelves};
+}
+
+// Strategie D: lagenweise Reihen mit Auflage über die Länge (Brücken erlaubt).
+// Basislage füllen, obere Lagen auf die tragende Länge darunter – ein Paket
+// darf über mehreren unteren liegen (nur „kein Überstand in Längsrichtung").
+// Best-Fit über alle Reihen/Lagen; ein etwas höheres Paket darf eine Lage
+// mitheben, solange die Reihe insgesamt ≤ 2,80 m bleibt.
+function _laneHeight(lane){ let h=0; for(const L of lane.layers) h+=UNDERLAY_H+L.maxH; return h; }
+function planLayeredLanes(units){
+  if(!units.length) return {placements:[], notPlacedU:[], shelves:[]};
+  const maxFW=Math.max(...units.map(u=>u.footW));
+  const N=Math.max(1, Math.floor((TRUCK.W+0.01)/maxFW));
+  const lanes=[]; for(let i=0;i<N;i++) lanes.push({y:i*maxFW, layers:[]});
+  const rem=units.slice().sort((a,b)=> b.footL-a.footL || b.h-a.h);
+  const notPlacedU=[];
+  for(const u of rem){
+    let best=null;
+    for(const lane of lanes){
+      // bestehende Lagen
+      for(let li=0; li<lane.layers.length; li++){
+        const layer=lane.layers[li];
+        const support = li===0 ? TRUCK.L : lane.layers[li-1].length;
+        if(layer.length+u.footL <= support+0.01){
+          const old=layer.maxH; layer.maxH=Math.max(old,u.h);
+          const ok=_laneHeight(lane)<=TRUCK.H+1e-6; layer.maxH=old;
+          if(ok){ const lo=support-(layer.length+u.footL); if(!best||lo<best.lo) best={lane,li,lo,isNew:false}; }
+        }
+      }
+      // neue oberste Lage (bestehende werden per Bonus bevorzugt)
+      const li=lane.layers.length;
+      const support = li===0 ? TRUCK.L : lane.layers[li-1].length;
+      const cnt=li+1;
+      const allLow = u.h<=LOW_H && lane.layers.every(L=>L.maxH<=LOW_H);
+      const fitsCnt = !(allLow && cnt>MAX_LAYERS_LOW);
+      const fitsH = _laneHeight(lane)+UNDERLAY_H+u.h <= TRUCK.H+1e-6;
+      if(fitsCnt && fitsH && u.footL <= support+0.01){
+        const lo=(support-u.footL)+1e6; if(!best||lo<best.lo) best={lane,li,lo,isNew:true};
+      }
+    }
+    if(!best){ notPlacedU.push(u); continue; }
+    const lane=best.lane;
+    if(best.isNew) lane.layers.push({packages:[{u,x:0}], length:u.footL, maxH:u.h});
+    else { const L=lane.layers[best.li]; L.packages.push({u,x:L.length}); L.length+=u.footL; L.maxH=Math.max(L.maxH,u.h); }
+  }
+  const placements=[]; const shelves=[];
+  for(const lane of lanes){
+    if(!lane.layers.length) continue;
+    let z=0;
+    lane.layers.forEach((layer,li)=>{ for(const pk of layer.packages) placements.push({u:pk.u, x:pk.x, y:lane.y, z:z+UNDERLAY_H, layer:li}); z+=UNDERLAY_H+layer.maxH; });
+    shelves.push({y:lane.y, width:maxFW, cursorX:lane.layers[0].length});
+  }
+  return {placements, notPlacedU, shelves};
+}
+
+// Strategie E: Boden voll ausnutzen. Die unterste Lage wird – so weit möglich
+// – über die volle Ladelänge (13,50 m) gefüllt, indem mehrere Pakete je Reihe
+// hintereinander kombiniert werden (Best-Fit-Decreasing in Reihen à 13,50 m).
+// Die längsten Reihen kommen nach unten, kürzere darüber (volle Auflage, kein
+// Überstand) – so wird der LKW von unten nach oben maximal beladen.
+function planFullFloorLanes(units){
+  if(!units.length) return {placements:[], notPlacedU:[], shelves:[]};
+  const maxFW=Math.max(...units.map(u=>u.footW));
+  const N=Math.max(1, Math.floor((TRUCK.W+0.01)/maxFW));       // Reihen nebeneinander
+  const maxH=Math.max(...units.map(u=>u.h));
+  let maxLay=Math.max(1, Math.floor(TRUCK.H/(UNDERLAY_H+maxH)));
+  if(maxH<=LOW_H) maxLay=Math.min(maxLay, MAX_LAYERS_LOW);      // ≤780 mm -> max 3 Lagen
+  const maxBins=N*maxLay;
+
+  // Best-Fit-Decreasing: Pakete (längstes zuerst) in Reihen à 13,50 m füllen.
+  const rem=units.slice().sort((a,b)=> b.footL-a.footL || b.h-a.h);
+  const bins=[]; const notPlacedU=[];
+  for(const u of rem){
+    let best=null;
+    for(const bin of bins){
+      const room=TRUCK.L-bin.len;
+      if(u.footL<=room+0.01 && (!best || room<best.room)) best={bin,room};
+    }
+    if(best){ best.bin.items.push(u); best.bin.len+=u.footL; }
+    else if(bins.length<maxBins){ bins.push({items:[u], len:u.footL}); }
+    else notPlacedU.push(u);                                   // passt auf keine Reihe mehr
+  }
+
+  // Reihen nach Länge absteigend -> längste Reihen zuerst = unterste Lagen.
+  bins.sort((a,b)=> b.len-a.len);
+  const lanes=[]; for(let i=0;i<N;i++) lanes.push({y:i*maxFW, layers:[]});
+  bins.forEach((bin,i)=>{ lanes[i%N].layers.push(bin); });     // reihum auf die Reihen verteilen
+
+  const placements=[]; const shelves=[];
+  for(const lane of lanes){
+    if(!lane.layers.length) continue;
+    let z=0;
+    lane.layers.forEach((layer,li)=>{
+      let x=0; const maxLH=Math.max(...layer.items.map(u=>u.h));
+      for(const u of layer.items){ placements.push({u, x, y:lane.y, z:z+UNDERLAY_H, layer:li}); x+=u.footL; }
+      z+=UNDERLAY_H+maxLH;
+    });
+    shelves.push({y:lane.y, width:maxFW, cursorX:lane.layers[0].len});
+  }
+  return {placements, notPlacedU, shelves};
+}
+
+// packFloor: alle Strategien rechnen (Säulen- und Lagen-Packer) und die
+// Variante mit den meisten geladenen Paketen nehmen; bei Gleichstand die mit
+// der am besten (länger) gefüllten Bodenlage.
+function packFloor(units){
+  const cands=[];
+  for(const former of [sameNumberColumns, mixedWidthColumns])
+    for(const packer of [planMixedLanes, planWidthGroups, planBalancedLanes])
+      cands.push(expandColumnPlan(packer(former(units))));
+  cands.push(planLayeredLanes(units));
+  cands.push(planFullFloorLanes(units));
+  const baseLen=p=> p.placements.filter(pl=>(pl.layer||0)===0).reduce((s,pl)=>s+(pl.u.footL||0),0);
+  let best=null, bestN=-1, bestB=-1;
+  for(const p of cands){
+    const n=p.placements.length, b=baseLen(p);
+    if(n>bestN || (n===bestN && b>bestB)){ best=p; bestN=n; bestB=b; }
+  }
+  return best;
+}
+
+function optimize(pkgs, opts={}){
+  const weightLimit = opts.weightLimit !== false;   // Gewichtslimit aktiv?
+  const warnings=[];
+
+  // --- Paket-Einheiten bilden ---------------------------------------------
+  const units=[];                      // je Paket eine Einheit
+  const requested={};                 // Paketnr. -> bestellte Menge
+  const pkgInfo={};                    // Paketnr. -> {l,w,h,color,cat}
+  const notLoaded={};                  // Paketnr. -> {space,weight,volume,oversize,oversizeReason}
+  const nl = no => (notLoaded[no] || (notLoaded[no]={space:0,weight:0,volume:0,oversize:0,oversizeReason:''}));
+
+  for(const p of pkgs){
+    requested[p.no]=(requested[p.no]||0)+p.n;
+    pkgInfo[p.no]={l:p.l,w:p.w,h:p.h,color:p.color,cat:p.cat};
+    // Passt das Paket überhaupt hinein?
+    const tooLong=p.l+2*GAP>TRUCK.L, tooWide=p.w+2*GAP>TRUCK.W, tooHigh=(UNDERLAY_H+p.h)>TRUCK.H;
+    if(tooLong||tooWide||tooHigh){
+      const d=nl(p.no); d.oversize+=p.n;
+      const r=[];
+      if(tooLong) r.push(`Länge ${p.l} mm > ${TRUCK.L-2*GAP} mm nutzbar`);
+      if(tooWide) r.push(`Breite ${p.w} mm > ${TRUCK.W-2*GAP} mm nutzbar`);
+      if(tooHigh) r.push(`Höhe ${p.h} mm + 72 mm Unterlage > ${TRUCK.H} mm`);
+      d.oversizeReason=r.join('; ');
+      continue;
+    }
+    for(let k=0;k<p.n;k++) units.push({
+      no:p.no, color:p.color, factor:p.factor, cat:p.cat, l:p.l, w:p.w, h:p.h, m3:p.m3||0,
+      brd:p.brd||null, footL:p.l+GAP, footW:p.w+GAP
+    });
+  }
+
+  // --- Grundflächen-Packung: beste Strategie wählen -----------------------
+  // packFloor kombiniert Säulen-Bildung (gleiche Nr. bzw. gemischt kürzer-
+  // auf-länger) mit mehreren Reihen-Packern und nimmt die Variante mit den
+  // meisten geladenen Paketen.
+  const plan = opts.manualPlan || packFloor(units);
+  const shelves = plan.shelves||[];
+  const notPlacedU = plan.notPlacedU || [];
+
+  // --- Emission mit Gewicht/Volumen-Budget --------------------------------
+  const boxes=[]; const underlays=[];
+  let totW=0, totV=0, totNet=0; const loaded={};
+  let budgetHit=null; const dropped=[];
+
+  // von unten nach oben, vorne zuerst – so bleibt beim Budget-Stopp nichts schweben
+  const seq = plan.placements.slice().sort((a,b)=> a.z-b.z || a.y-b.y || a.x-b.x);
+  let stop=false;
+  for(const pl of seq){
+    const it=pl.u;
+    if(stop){ dropped.push(it); continue; }
+    const grossVol = it.l*it.w*it.h/1e9;         // Umriss-Volumen (Raum)
+    const netVol   = it.m3>0 ? it.m3 : grossVol;  // Netto-Holzvolumen (Gewicht)
+    const wt  = netVol*it.factor;
+    if(weightLimit && totW+wt > MAX_WEIGHT+1e-6){ budgetHit=budgetHit||'weight'; stop=true; dropped.push(it); continue; }
+    if(totV+grossVol > MAX_VOLUME+1e-6){ budgetHit=budgetHit||'volume'; stop=true; dropped.push(it); continue; }
+    totW+=wt; totV+=grossVol; totNet+=netVol;
+    boxes.push({no:it.no,color:it.color,x:pl.x,y:pl.y,z:pl.z,l:it.l,w:it.w,h:it.h,layer:pl.layer||0,wt,factor:it.factor,m3:it.m3||0,brd:it.brd||null});
+    underlays.push({x:pl.x,                   y:pl.y, z:pl.z-UNDERLAY_H, len:UNDERLAY_LEN});
+    underlays.push({x:pl.x+it.l-UNDERLAY_LEN, y:pl.y, z:pl.z-UNDERLAY_H, len:UNDERLAY_LEN});
+    loaded[it.no]=(loaded[it.no]||0)+1;
+  }
+
+  // --- Kennzahlen ---------------------------------------------------------
+  let usedLen=0, floorArea=0, maxLayerUsed=0;
+  for(const sh of shelves) usedLen=Math.max(usedLen, sh.cursorX);
+  for(const b of boxes){
+    if(b.z <= UNDERLAY_H+1) floorArea += b.l*b.w;              // Basislage
+    maxLayerUsed=Math.max(maxLayerUsed, (b.layer||0)+1);
+  }
+  if(!usedLen) for(const b of boxes) usedLen=Math.max(usedLen, b.x+b.l+GAP);
+  const ldm = floorArea / TRUCK.W / 1000;  // Lademeter = genutzte Fläche(mm²)/Breite(mm) → m
+
+  // --- Achslasten / Lastverteilung ----------------------------------------
+  // Nutzlast verteilt sich nach dem Hebelgesetz zwischen Königszapfen (vorne)
+  // und Achsaggregat (hinten). Da Pakete nur längs verschoben werden dürfen,
+  // werden die Reihen innerhalb ihres freien Spielraums so geschoben, dass der
+  // Lastschwerpunkt möglichst ins zulässige Fenster fällt (beste Verteilung).
+  const ax = opts.axle || {};
+  const X_KP   = ax.kingpin ?? 1600;     // Königszapfen ab Stirnwand (mm)
+  const X_AX   = ax.axle    ?? 9300;     // Achsmitte ab Stirnwand (mm)
+  const MAX_KP = ax.maxKingpin ?? 12000; // max. Sattellast (kg)
+  const MAX_AX = ax.maxAxle    ?? 24000; // max. Achslast Aggregat (kg)
+  const LEER_KP = Math.max(0, ax.leerKingpin ?? 0); // Eigengewichts-Anteil Sattellast (kg)
+  const LEER_AX = Math.max(0, ax.leerAxle    ?? 0); // Eigengewichts-Anteil Achslast (kg)
+  const MIN_KP  = Math.max(0, ax.minKingpin  ?? 0); // Mindest-Sattellast (kg), 0 = aus
+  const CAP_KP = Math.max(0, MAX_KP - LEER_KP);     // Rest-Kapazität Sattellast für Nutzlast
+  const CAP_AX = Math.max(0, MAX_AX - LEER_AX);     // Rest-Kapazität Achslast für Nutzlast
+  const MINPAY_KP = MIN_KP - LEER_KP;               // von der Nutzlast benötigte Mindest-Sattellast
+  const span   = Math.max(1, X_AX - X_KP);
+
+  // Reihen (nach y) mit Gewicht, Schwerpunkt (Frontlage) und Spielraum
+  const laneMap = new Map();
+  for(const b of boxes){
+    let L = laneMap.get(b.y);
+    if(!L){ L={y:b.y, wt:0, mom:0}; laneMap.set(b.y, L); }
+    L.wt += b.wt; L.mom += b.wt*(b.x + b.l/2);
+  }
+  // Freier Längs-Spielraum je Reihe = Restlänge hinter der tatsächlich
+  // geladenen Grundfläche (entfallene Stapel geben Platz zum Verschieben frei).
+  const laneRight = {};
+  for(const b of boxes){ const end=b.x + b.l + GAP; if(!(b.y in laneRight) || end>laneRight[b.y]) laneRight[b.y]=end; }
+  const slackOf = {};
+  for(const y in laneRight) slackOf[y] = Math.max(0, TRUCK.L - laneRight[y]);
+
+  let P = totW;                          // Nutzlast gesamt (kg)
+  let axle = null;
+  if(P > 1e-6){
+    let frontMom=0, slackMom=0;
+    for(const L of laneMap.values()){
+      frontMom += L.mom;
+      slackMom += L.wt * (slackOf[L.y]||0);
+    }
+    const cogFront = frontMom / P;                 // Schwerpunkt bei Frontbeladung
+    const cogRear  = cogFront + slackMom / P;      // Schwerpunkt bei Heckverschiebung
+    // Zulässiges Schwerpunktfenster aus den (um das Eigengewicht reduzierten)
+    // Rest-Kapazitäten für die Nutzlast
+    const cogMaxAxle = X_KP + CAP_AX * span / P;      // Achsaggregat-Grenze (oben)
+    // Mindest-Sattellast begrenzt den Schwerpunkt nach hinten (oben) zusätzlich
+    const cogMaxMinKp = MINPAY_KP > 0 ? X_KP + (P - MINPAY_KP) * span / P : Infinity;
+    const cogMaxRaw = Math.min(cogMaxAxle, cogMaxMinKp);
+    const cogMinRaw = X_KP + (P - CAP_KP) * span / P; // max. Königszapfen-Grenze (unten)
+    const feasible  = cogMinRaw <= cogMaxRaw;         // Nutzlast überhaupt verteilbar?
+    const cogMin = Math.max(0, cogMinRaw);
+    const cogMax = Math.min(TRUCK.L, cogMaxRaw);
+    // Beladung beginnt IMMER bündig an der vorderen Ladewand (Stirnwand) –
+    // so entsteht vorne kein Leerraum. Der Schwerpunkt bleibt daher so weit
+    // vorne wie möglich (cogFront). Nur wenn die Sattellast dadurch das
+    // zulässige Maximum überschreiten würde (Schwerpunkt zu weit vorne,
+    // cogFront < cogMin), wird so wenig wie nötig nach hinten verschoben.
+    const target = Math.min(cogRear, Math.max(cogFront, cogMin));
+    const f = cogRear>cogFront+1e-6 ? Math.min(1, Math.max(0, (target-cogFront)/(cogRear-cogFront))) : 0;
+    // Längsverschiebung anwenden (Boxen + Unterlagshölzer je Reihe)
+    const shiftOf = {};
+    for(const L of laneMap.values()) shiftOf[L.y] = f*(slackOf[L.y]||0);
+    for(const b of boxes)     b.x += (shiftOf[b.y]||0);
+    for(const u of underlays) u.x += (shiftOf[u.y]||0);
+    // Endgültiger Schwerpunkt & Auflagerkräfte (Nutzlast + Eigengewichtsanteil)
+    let mom=0; for(const b of boxes) mom += b.wt*(b.x + b.l/2);
+    const cog = mom / P;
+    const rAxlePay = P * (cog - X_KP) / span;
+    const rKingPay = P - rAxlePay;
+    const rAxle = rAxlePay + LEER_AX;
+    const rKing = rKingPay + LEER_KP;
+    axle = {
+      P, cog, rAxle, rKing, rAxlePay, rKingPay, leerAxle:LEER_AX, leerKing:LEER_KP,
+      maxAxle:MAX_AX, maxKing:MAX_KP, minKing:MIN_KP, xKP:X_KP, xAX:X_AX, cogMin, cogMax, feasible,
+      okAxle: rAxle <= MAX_AX+1e-6, okKing: rKing <= MAX_KP+1e-6,
+      okMinKing: MIN_KP<=0 || rKing >= MIN_KP-1e-6, kingNeg: rKing < 0
+    };
+    if(!feasible) warnings.push(`Nutzlast ${fmt(P)} kg übersteigt die Summe der zulässigen Auflagerlasten (${fmt(MAX_KP)} + ${fmt(MAX_AX)} kg) – keine zulässige Lastverteilung möglich, Ladung reduzieren.`);
+    if(MIN_KP>0 && rKing < MIN_KP-1e-6) warnings.push(`Sattellast ${fmt(rKing)} kg unter Mindestwert ${fmt(MIN_KP)} kg – Ladung weiter nach vorne verteilen (Traktion/Lenkstabilität).`);
+    if(!axle.okAxle) warnings.push(`Achslast Achsaggregat ${fmt(rAxle)} kg über zulässigen ${fmt(MAX_AX)} kg – Ladung leichter machen oder weiter nach vorne verteilen.`);
+    if(!axle.okKing) warnings.push(`Sattellast (Königszapfen) ${fmt(rKing)} kg über zulässigen ${fmt(MAX_KP)} kg – Ladung weiter nach hinten verteilen.`);
+    if(axle.kingNeg) warnings.push(`Rechnerisch negative Sattellast – Ladung liegt zu weit hinten (Kippgefahr/instabile Lenkung).`);
+  }
+
+  // --- Gründe für nicht geladene Pakete -----------------------------------
+  for(const u of notPlacedU) nl(u.no).space++;                 // kein Platz auf der Ladefläche
+  for(const u of dropped) if(budgetHit) nl(u.no)[budgetHit]++; // wegen Gewicht/Volumen entfallen
+
+  // fehlende Pakete
+  let totReq=0, totLoad=0;
+  for(const k in requested) totReq+=requested[k];
+  for(const k in loaded) totLoad+=loaded[k];
+
+  if(budgetHit==='weight') warnings.push(`Maximales Gewicht von 24 t erreicht – nicht alle Pakete konnten geladen werden.`);
+  if(budgetHit==='volume') warnings.push(`Maximales Volumen von 90 m³ erreicht – nicht alle Pakete konnten geladen werden.`);
+  if(!weightLimit && totW > MAX_WEIGHT+1e-6)
+    warnings.push(`Gewichtslimit deaktiviert: Beladung wiegt ${fmt(totW)} kg und überschreitet die 24 t – bitte gesondert prüfen (z. B. Achslasten).`);
+
+  return {
+    boxes, underlays, shelves,
+    unplaced:[...notPlacedU, ...dropped],   // Pakete, die (noch) nicht geladen sind
+    stats:{ totW, totV, totNet, ldm, usedLen, maxLayerUsed, floorArea,
+            totReq, totLoad, requested, loaded, notLoaded, pkgInfo, weightLimit, axle },
+    warnings
+  };
+}
+
+/* =========================================================================
+   Mehrere LKW: reicht ein Sattelzug nicht aus, wird automatisch ein
+   weiterer (2., 3., … x.) befüllt, bis alle passenden Pakete verladen sind.
+   Jeder LKW wird für sich optimal gepackt (Gewicht/Volumen/Achslast gelten
+   je Fahrzeug); die restlichen Pakete wandern auf den nächsten LKW.
+   ========================================================================= */
+function unitsToPkgs(units){
+  const map=new Map();
+  for(const u of units){
+    const key=[u.no,u.l,u.w,u.h,u.m3||0,u.cat].join('|');
+    let p=map.get(key);
+    if(!p){ p={no:u.no,l:u.l,w:u.w,h:u.h,m3:u.m3||0,factor:u.factor,color:u.color,cat:u.cat,brd:u.brd||null,n:0}; map.set(key,p); }
+    p.n++;
+  }
+  return [...map.values()];
+}
+
+function optimizeMulti(list, opts={}){
+  const trucks=[];
+  let remaining=list.slice();
+  let guard=0;
+  while(remaining.length && guard++<60){
+    const res=optimize(remaining, opts);
+    trucks.push(res);
+    if(res.boxes.length===0){ res._stuck=true; break; }   // nichts platzierbar -> Abbruch
+    const leftover=unitsToPkgs(res.unplaced);
+    if(!leftover.length) break;                            // alles verladen
+    remaining=leftover;
+  }
+  return trucks;
+}
+
+// Aggregierte Kennzahlen über alle LKW (für Kopfzeile + Sammel-Aufstellung)
+function aggregate(trucks){
+  const first=trucks[0].stats;
+  let totLoad=0, totW=0, totV=0, totNet=0;
+  for(const t of trucks){ totLoad+=t.stats.totLoad; totW+=t.stats.totW; totV+=t.stats.totV; totNet+=t.stats.totNet; }
+  // Endgültig nicht geladene Pakete: nur „zu groß" (dauerhaft) + evtl. Rest
+  // des letzten LKW, falls die Beladung dort abgebrochen wurde.
+  const notLoaded={};
+  const ensure=no=>(notLoaded[no]||(notLoaded[no]={space:0,weight:0,volume:0,oversize:0,oversizeReason:''}));
+  for(const no in first.notLoaded){
+    const d=first.notLoaded[no];
+    if(d.oversize>0){ const e=ensure(no); e.oversize+=d.oversize; e.oversizeReason=d.oversizeReason; }
+  }
+  const last=trucks[trucks.length-1];
+  if(last._stuck){
+    for(const no in last.stats.notLoaded){
+      const d=last.stats.notLoaded[no], e=ensure(no);
+      e.space+=d.space; e.weight+=d.weight; e.volume+=d.volume;
+    }
+  }
+  return { totReq:first.totReq, totLoad, totW, totV, totNet, notLoaded, pkgInfo:first.pkgInfo };
+}
+
+/* =========================================================================
+   Visualisierung (SVG)
+   ========================================================================= */
+function fmt(n,d=0){ return n.toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// Seitenansicht: X (Länge) × Z (Höhe), MIT Rädern
+function renderSide(res){
+  const M=120;                         // Rand
+  const vbW=TRUCK.L+2*M;
+  const floorY=M+TRUCK.H;              // Bodenlinie (SVG-y)
+  const wheelR=210;
+  const vbH=floorY+wheelR*2+M;
+  const X=x=>M+x;
+  const Zt=(z,h)=>floorY-z-h;          // obere Kante eines Objekts der Höhe h auf Höhe z
+
+  let s=`<svg viewBox="0 0 ${vbW} ${vbH}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Seitenansicht">`;
+  // Boden / Fahrbahn
+  s+=`<line x1="0" y1="${floorY}" x2="${vbW}" y2="${floorY}" stroke="#94a3b8" stroke-width="3"/>`;
+  // Laderaum-Rahmen (Plane)
+  s+=`<rect x="${X(0)}" y="${M}" width="${TRUCK.L}" height="${TRUCK.H}" fill="#ffffff" stroke="#334155" stroke-width="6"/>`;
+  // Höhen-Raster (jede 0,5 m gestrichelt)
+  for(let z=500;z<TRUCK.H;z+=500){
+    s+=`<line x1="${X(0)}" y1="${floorY-z}" x2="${X(TRUCK.L)}" y2="${floorY-z}" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="14 14"/>`;
+  }
+  // Räder (Zugmaschine + 3 Trailer-Achsen)
+  const wheels=[900, TRUCK.L-3200, TRUCK.L-2100, TRUCK.L-1000];
+  for(const wx of wheels){
+    s+=`<circle cx="${X(wx)}" cy="${floorY+wheelR}" r="${wheelR}" fill="#1e293b"/>`;
+    s+=`<circle cx="${X(wx)}" cy="${floorY+wheelR}" r="${wheelR*0.45}" fill="#64748b"/>`;
+  }
+  // Unterlagshölzer
+  for(const u of res.underlays){
+    s+=`<rect x="${X(u.x)}" y="${Zt(u.z,UNDERLAY_H)}" width="${u.len}" height="${UNDERLAY_H}" fill="#78350f" stroke="#451a03" stroke-width="2"/>`;
+  }
+  // Pakete (hintere Reihen zuerst zeichnen -> größeres y hinten)
+  const boxes=[...res.boxes].sort((a,b)=> b.y-a.y);
+  for(const b of boxes){
+    // Mit hinterlegtem Brett-/Latten-Aufbau: Brettlagen einzeln zeichnen und
+    // die Latten NUR als Querschnitt von der Seite (schmale gelb-schwarze
+    // Klötzchen über den Auflagern) – eine 12/18er Latte ist 12 mm hoch und
+    // 18 mm breit, läuft also quer zur Fahrtrichtung.
+    if(b.brd && b.brd.hi>=1 && b.brd.bb>0){
+      const {hi,bb,st}=b.brd; const every=b.brd.every||1;
+      const totalSlats=Math.floor(hi/every); const sw=slatWidth(st);
+      const stC=[b.x+UNDERLAY_LEN/2, b.x+b.l-UNDERLAY_LEN/2];   // über den Auflagern
+      if(b.l>6500) stC.splice(1,0,b.x+b.l/2);                    // lange Pakete: mittig zusätzlich
+      let zc=b.z, done=0;
+      for(let k=0;k<hi;k++){
+        s+=`<rect x="${X(b.x)}" y="${Zt(zc,bb)}" width="${b.l}" height="${bb}" fill="${b.color}" fill-opacity="0.85" stroke="#0f172a" stroke-width="1"/>`;
+        zc+=bb;
+        if(((k+1)%every)===0 && done<totalSlats && st>0){
+          for(const cx of stC)
+            s+=`<rect x="${X(cx-sw/2)}" y="${Zt(zc,st)}" width="${sw}" height="${st}" fill="#facc15" stroke="#111827" stroke-width="1.5"/>`;
+          zc+=st; done++;
+        }
+      }
+      s+=`<rect x="${X(b.x)}" y="${Zt(b.z,b.h)}" width="${b.l}" height="${b.h}" rx="6" fill="none" stroke="#0f172a" stroke-width="2.5"/>`;
+    } else {
+      s+=`<rect x="${X(b.x)}" y="${Zt(b.z,b.h)}" width="${b.l}" height="${b.h}" rx="6"
+           fill="${b.color}" fill-opacity="0.85" stroke="#0f172a" stroke-width="2.5"/>`;
+    }
+    if(b.l>700 && b.h>90){
+      s+=`<text x="${X(b.x+b.l/2)}" y="${Zt(b.z,b.h)+b.h/2+18}" text-anchor="middle"
+           font-size="52" font-weight="700" fill="#fff" paint-order="stroke"
+           stroke="#0f172a" stroke-width="6">${esc(b.no)}</text>`;
+    }
+  }
+  // Maßangaben
+  s+=`<text x="${X(TRUCK.L/2)}" y="${M-30}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600">← ${fmt(TRUCK.L/1000,2)} m →</text>`;
+  s+=`<text x="${X(0)-42}" y="${M+TRUCK.H/2}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600" transform="rotate(-90 ${X(0)-42} ${M+TRUCK.H/2})">2,80 m</text>`;
+  s+=`</svg>`;
+  return s;
+}
+
+// Draufsicht: X (Länge) × Y (Breite), OHNE Räder
+function renderTop(res){
+  const M=120;
+  const vbW=TRUCK.L+2*M;
+  const vbH=TRUCK.W+2*M;
+  const X=x=>M+x, Y=y=>M+y;
+
+  let s=`<svg viewBox="0 0 ${vbW} ${vbH}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Draufsicht">`;
+  // Ladefläche
+  s+=`<rect x="${X(0)}" y="${Y(0)}" width="${TRUCK.L}" height="${TRUCK.W}" fill="#ffffff" stroke="#334155" stroke-width="6"/>`;
+  // Fahrtrichtung
+  s+=`<line x1="${X(0)}" y1="${Y(TRUCK.W/2)}" x2="${X(TRUCK.L)}" y2="${Y(TRUCK.W/2)}" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="20 20"/>`;
+  s+=`<text x="${X(TRUCK.L)-20}" y="${Y(TRUCK.W/2)-16}" text-anchor="end" font-size="40" fill="#94a3b8">Fahrtrichtung →</text>`;
+
+  // Nur unterste Lage in Draufsicht (Grundflächen); gestapelte Lagen liegen darüber
+  const base=res.boxes.filter(b=>b.layer===0);
+  for(const b of base){
+    // Anzahl Lagen über dieser Grundfläche (auch bei Brücken/Versatz)
+    const layersHere=res.boxes.filter(o=> o.y===b.y && o.x < b.x+b.l && o.x+o.l > b.x).length;
+    s+=`<rect x="${X(b.x)}" y="${Y(b.y)}" width="${b.l}" height="${b.w}" rx="6"
+         fill="${b.color}" fill-opacity="0.88" stroke="#0f172a" stroke-width="2.5"/>`;
+    // Bretter quer nebeneinander (ac Stück, je bh breit) als Längslinien
+    if(b.brd && b.brd.ac>1 && b.brd.bh>0){
+      const {ac,bh}=b.brd;
+      for(let j=1;j<ac;j++){
+        const yy=b.y+j*bh; if(yy>=b.y+b.w-0.5) break;
+        s+=`<line x1="${X(b.x)}" y1="${Y(yy)}" x2="${X(b.x+b.l)}" y2="${Y(yy)}" stroke="#0f172a" stroke-width="16" stroke-opacity="0.45"/>`;
+      }
+    }
+    // Unterlagshölzer (2 Querhölzer) angedeutet
+    s+=`<rect x="${X(b.x)}" y="${Y(b.y)}" width="${UNDERLAY_LEN}" height="${b.w}" fill="#451a03" fill-opacity="0.25"/>`;
+    s+=`<rect x="${X(b.x+b.l-UNDERLAY_LEN)}" y="${Y(b.y)}" width="${UNDERLAY_LEN}" height="${b.w}" fill="#451a03" fill-opacity="0.25"/>`;
+    if(b.l>600 && b.w>250){
+      s+=`<text x="${X(b.x+b.l/2)}" y="${Y(b.y+b.w/2)+16}" text-anchor="middle"
+           font-size="52" font-weight="700" fill="#fff" paint-order="stroke"
+           stroke="#0f172a" stroke-width="4">${esc(b.no)}${layersHere>1?` ×${layersHere}`:''}</text>`;
+    }
+  }
+  s+=`<text x="${X(TRUCK.L/2)}" y="${M-30}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600">← ${fmt(TRUCK.L/1000,2)} m →</text>`;
+  s+=`<text x="${X(0)-42}" y="${Y(TRUCK.W/2)}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600" transform="rotate(-90 ${X(0)-42} ${Y(TRUCK.W/2)})">2,48 m</text>`;
+  s+=`</svg>`;
+  return s;
+}
+
+/* =========================================================================
+   3D-Simulation (eigenständiger Canvas-Renderer, keine Fremdbibliothek)
+   Perspektivische Projektion + Painter-Algorithmus, frei drehbar.
+   ========================================================================= */
+let _3dList = [];   // aktive 3D-Instanzen (eine je LKW)
+function teardown3D(){
+  for(const i of _3dList){ if(i.raf) cancelAnimationFrame(i.raf); if(i.resize) window.removeEventListener('resize', i.resize); }
+  _3dList=[];
+}
+
+function shade(hex, f){
+  const n = parseInt(hex.slice(1),16);
+  const r = Math.min(255,((n>>16)&255)*f)|0;
+  const g = Math.min(255,((n>>8)&255)*f)|0;
+  const b = Math.min(255,(n&255)*f)|0;
+  return `rgb(${r},${g},${b})`;
+}
+
+// Box → 6 Flächen (Eckenreihenfolge außen umlaufend), mit Schattierung
+function boxFaces(x,y,z,l,w,h,color){
+  const c=[
+    [x,y,z],[x+l,y,z],[x+l,y+w,z],[x,y+w,z],
+    [x,y,z+h],[x+l,y,z+h],[x+l,y+w,z+h],[x,y+w,z+h]
+  ];
+  const F=[
+    {i:[4,5,6,7],s:1.00}, // oben
+    {i:[0,1,5,4],s:0.86}, // vorne (-Y)
+    {i:[1,2,6,5],s:0.80}, // rechts (+X)
+    {i:[3,7,6,2],s:0.72}, // hinten (+Y)
+    {i:[0,4,7,3],s:0.66}, // links (-X)
+    {i:[0,3,2,1],s:0.55}, // unten
+  ];
+  return F.map(f=>({ pts:f.i.map(k=>c[k]), fill:shade(color,f.s) }));
+}
+
+function setup3D(res, cv){
+  if(!cv) return;
+  const ctx = cv.getContext('2d');
+  const inst = { raf:0, resize:null };
+  _3dList.push(inst);
+
+  // --- Szene aufbauen (zentriert um Laderaum-Mitte) ---
+  const CX=TRUCK.L/2, CY=TRUCK.W/2, CZ=TRUCK.H/2;
+  const faces=[];   // {pts:[[x,y,z]..], fill}
+  const addBox=(x,y,z,l,w,h,color)=>{ for(const f of boxFaces(x,y,z,l,w,h,color)) faces.push(f); };
+
+  // Räder (dunkel, unter dem Boden)
+  const wheelXs=[900, TRUCK.L-3200, TRUCK.L-2100, TRUCK.L-1000];
+  for(const wx of wheelXs){
+    addBox(wx-350, -60,        -820, 700, 260, 620, '#1e293b');
+    addBox(wx-350, TRUCK.W-200, -820, 700, 260, 620, '#1e293b');
+  }
+  // Unterlagshölzer
+  for(const u of res.underlays) addBox(u.x, 0, u.z, u.len, TRUCK.W, UNDERLAY_H, '#78350f');
+  // Pakete
+  for(const b of res.boxes) addBox(b.x, b.y, b.z, b.l, b.w, b.h, b.color);
+
+  // Bodenfläche (leicht transparent) als eigene Fläche
+  const floor={ pts:[[0,0,0],[TRUCK.L,0,0],[TRUCK.L,TRUCK.W,0],[0,TRUCK.W,0]], fill:'rgba(148,163,184,0.20)' };
+
+  // Kanten des Laderaums (Drahtgitter)
+  const V=[
+    [0,0,0],[TRUCK.L,0,0],[TRUCK.L,TRUCK.W,0],[0,TRUCK.W,0],
+    [0,0,TRUCK.H],[TRUCK.L,0,TRUCK.H],[TRUCK.L,TRUCK.W,TRUCK.H],[0,TRUCK.W,TRUCK.H]
+  ];
+  const E=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+
+  // --- Zustand / Kamera ---
+  const st={ yaw:-0.62, pitch:0.48, zoom:1, camDist:24000, focal:1, cx:0, cy:0 };
+  const DEF={ yaw:-0.62, pitch:0.48, zoom:1 };
+
+  function rot(p){
+    const cyw=Math.cos(st.yaw), syw=Math.sin(st.yaw);
+    let x=(p[0]-CX)*cyw-(p[1]-CY)*syw;
+    let y=(p[0]-CX)*syw+(p[1]-CY)*cyw;
+    let z=p[2]-CZ;
+    const cp=Math.cos(st.pitch), sp=Math.sin(st.pitch);
+    return { x, y:y*cp-z*sp, z:y*sp+z*cp };
+  }
+  function proj(p){
+    const r=rot(p);
+    const depth=r.y+st.camDist;
+    const s=(st.focal*st.zoom)/depth;
+    return { X:st.cx+r.x*s, Y:st.cy-r.z*s, depth };
+  }
+
+  // Auto-Fit (in CSS-Pixeln): Brennweite so, dass der Laderaum ins Canvas passt
+  function fit(w,h){
+    let mx=1e-9, my=1e-9;
+    for(const v of V){
+      const r=rot(v), depth=r.y+st.camDist;
+      mx=Math.max(mx, Math.abs(r.x/depth));
+      my=Math.max(my, Math.abs(r.z/depth));
+    }
+    st.focal=Math.min((w/2)*0.90/mx, (h/2)*0.90/my);
+  }
+
+  function resize(){
+    const w=cv.parentElement.clientWidth;
+    const h=Math.max(320, Math.min(560, Math.round(w*0.5)));
+    const dpr=Math.min(2, window.devicePixelRatio||1);
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    cv.style.height=h+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);   // ab jetzt in CSS-Pixeln zeichnen
+    st.cx=w/2; st.cy=h/2;
+    fit(w,h);
+    draw();
+  }
+
+  function draw(){
+    const w=st.cx*2, h=st.cy*2;
+    ctx.clearRect(0,0,w,h);
+    // alle Flächen sammeln (inkl. Boden), nach Tiefe sortieren (fern zuerst)
+    const list=[];
+    const push=(f)=>{
+      const P=f.pts.map(proj);
+      let d=0; for(const p of P) d+=p.depth; d/=P.length;
+      list.push({P, fill:f.fill, d});
+    };
+    push(floor);
+    for(const f of faces) push(f);
+    list.sort((a,b)=>b.d-a.d);
+    for(const f of list){
+      ctx.beginPath();
+      ctx.moveTo(f.P[0].X, f.P[0].Y);
+      for(let i=1;i<f.P.length;i++) ctx.lineTo(f.P[i].X, f.P[i].Y);
+      ctx.closePath();
+      ctx.fillStyle=f.fill; ctx.fill();
+      ctx.lineWidth=0.6; ctx.strokeStyle='rgba(15,23,42,0.35)'; ctx.stroke();
+    }
+    // Laderaum-Drahtgitter oben drauf
+    ctx.lineWidth=1.4; ctx.strokeStyle='rgba(30,41,59,0.55)';
+    ctx.beginPath();
+    for(const e of E){ const a=proj(V[e[0]]), b=proj(V[e[1]]); ctx.moveTo(a.X,a.Y); ctx.lineTo(b.X,b.Y); }
+    ctx.stroke();
+    // Fahrtrichtungs-Pfeil (entlang X am Boden)
+    const a0=proj([300,CY,60]), a1=proj([2600,CY,60]);
+    ctx.strokeStyle='rgba(37,99,235,0.9)'; ctx.lineWidth=2.4;
+    ctx.beginPath(); ctx.moveTo(a0.X,a0.Y); ctx.lineTo(a1.X,a1.Y); ctx.stroke();
+    const ang=Math.atan2(a1.Y-a0.Y, a1.X-a0.X);
+    ctx.beginPath(); ctx.moveTo(a1.X,a1.Y);
+    ctx.lineTo(a1.X-14*Math.cos(ang-0.4), a1.Y-14*Math.sin(ang-0.4));
+    ctx.lineTo(a1.X-14*Math.cos(ang+0.4), a1.Y-14*Math.sin(ang+0.4));
+    ctx.closePath(); ctx.fillStyle='rgba(37,99,235,0.9)'; ctx.fill();
+    ctx.fillStyle='#1e40af'; ctx.font='600 12px sans-serif';
+    ctx.fillText('Fahrtrichtung', a0.X, a0.Y-8);
+  }
+
+  // --- Interaktion ---
+  let drag=false, px=0, py=0;
+  cv.addEventListener('pointerdown', e=>{ drag=true; px=e.clientX; py=e.clientY; cv.setPointerCapture(e.pointerId); autoOff(); });
+  cv.addEventListener('pointermove', e=>{
+    if(!drag) return;
+    st.yaw += (e.clientX-px)*0.008;
+    st.pitch += (e.clientY-py)*0.008;
+    st.pitch=Math.max(-1.45, Math.min(1.45, st.pitch));
+    px=e.clientX; py=e.clientY; draw();
+  });
+  cv.addEventListener('pointerup', e=>{ drag=false; });
+  cv.addEventListener('wheel', e=>{
+    e.preventDefault();
+    st.zoom *= (e.deltaY<0?1.1:0.9);
+    st.zoom=Math.max(0.3, Math.min(6, st.zoom));
+    draw();
+  }, {passive:false});
+
+  const wrap=cv.closest('.c3d-wrap') || document;
+  const rotBtn=wrap.querySelector('.c3d-rot');
+  const resetBtn=wrap.querySelector('.c3d-reset');
+  function autoOff(){ if(inst.raf){ cancelAnimationFrame(inst.raf); inst.raf=0; if(rotBtn) rotBtn.classList.remove('on'); } }
+  if(rotBtn) rotBtn.addEventListener('click', ()=>{
+    if(inst.raf){ autoOff(); return; }
+    rotBtn.classList.add('on');
+    const step=()=>{ st.yaw+=0.006; draw(); inst.raf=requestAnimationFrame(step); };
+    inst.raf=requestAnimationFrame(step);
+  });
+  if(resetBtn) resetBtn.addEventListener('click', ()=>{ autoOff(); st.yaw=DEF.yaw; st.pitch=DEF.pitch; st.zoom=DEF.zoom; draw(); });
+
+  inst.resize=resize;
+  window.addEventListener('resize', resize);
+  resize();
+}
+
+/* =========================================================================
+   Manuelle Anordnung (Drag & Drop, Draufsicht) + Ablage neben dem LKW
+   ========================================================================= */
+function edVehicle(){
+  const v=id=>{ const el=document.getElementById(id); const n=el?+el.value:0; return isFinite(n)?n:0; };
+  return { xKP:v('axKP')||1600, xAX:v('axAX')||9300, maxKP:v('axMaxKP')||12000,
+           maxAX:v('axMaxAX')||24000, leerKP:v('axLeerKP'), leerAX:v('axLeerAX'), minKP:v('axMinKP') };
+}
+function edWeight(it){ const gv=it.l*it.w*it.h/1e9; return (it.m3>0?it.m3:gv)*it.factor; }
+function edOverlap(a,b){ return a.x < b.x+b.l-1 && a.x+a.l > b.x+1 && a.y < b.y+b.w-1 && a.y+a.w > b.y+1; }
+
+// Ein eigenständiger Editor je LKW-Karte. Alle Elemente werden relativ zur
+// Karte gesucht, der Zustand liegt in card._ed – so lassen sich beliebig viele
+// LKW gleichzeitig frei umsortieren, ohne sich gegenseitig zu stören.
+let _drag=null;
+let _editors=[];                                 // alle LKW-Editoren (für LKW-übergreifendes Ziehen)
+function resetAllEditors(){ _editors.forEach(e=>e.rebuild&&e.rebuild()); }
+function makeEditor(card, res){
+  const floor=card.querySelector('.ed-floor');
+  const stage=card.querySelector('.ed-stage');
+  const info =card.querySelector('.ed-info');
+  const side =card.querySelector('.ed-side');
+  const resetBtn=card.querySelector('.ed-reset');
+  const clearBtn=card.querySelector('.ed-clear');
+  if(!floor||!stage) return;
+
+  const build=()=>{
+    const items=[];
+    for(const b of res.boxes) items.push({no:b.no,color:b.color,l:b.l,w:b.w,h:b.h,m3:b.m3||0,factor:b.factor||0,brd:b.brd||null,placed:true,x:b.x,y:b.y,z:b.z,layer:b.layer||0});
+    for(const u of (res.unplaced||[])) items.push({no:u.no,color:u.color,l:u.l,w:u.w,h:u.h,m3:u.m3||0,factor:u.factor||0,brd:u.brd||null,placed:false,x:0,y:0,z:UNDERLAY_H,layer:0});
+    return items;
+  };
+  const ed={ card, floor, stage, info, side, items:build(), draw, stackZ };
+  ed.rebuild=()=>{ ed.items=build(); draw(); };
+  card._ed=ed;
+  _editors.push(ed);
+
+  function stackZ(item){
+    const others=ed.items.filter(o=>o!==item && o.placed && edOverlap(item,o));
+    if(others.length){
+      const parent=others.reduce((a,b)=> (b.z+b.h)>(a.z+a.h)?b:a);
+      const z=parent.z+parent.h+UNDERLAY_H;
+      if(z+item.h<=TRUCK.H+1){ item.z=z; item.layer=parent.layer+1; return; }
+    }
+    item.z=UNDERLAY_H; item.layer=0;
+  }
+
+  function draw(){
+    const W=floor.clientWidth || card.clientWidth || 800;
+    const M=60, scale=W/(TRUCK.L+2*M);
+    floor.style.height=((TRUCK.W+2*M)*scale)+'px';
+    const frame=floor.querySelector('.truck-frame');
+    frame.style.left=(M*scale)+'px'; frame.style.top=(M*scale)+'px';
+    frame.style.width=(TRUCK.L*scale)+'px'; frame.style.height=(TRUCK.W*scale)+'px';
+    floor.querySelectorAll('.ed-pkg').forEach(e=>e.remove());
+    stage.querySelectorAll('.ed-pkg').forEach(e=>e.remove());
+    ed.items.forEach((it,idx)=>{
+      const d=document.createElement('div'); d.className='ed-pkg'; d.dataset.idx=idx;
+      d.style.background=it.color;
+      d.title=`${it.no}  ${it.l}×${it.w}×${it.h} mm`;
+      d.innerHTML=`${esc(it.no)}${it.placed&&it.layer>0?`<span class="lay">L${it.layer+1}</span>`:''}`;
+      if(it.placed){
+        d.style.left=((M+it.x)*scale)+'px'; d.style.top=((M+it.y)*scale)+'px';
+        d.style.width=(it.l*scale)+'px'; d.style.height=(it.w*scale)+'px';
+        d.style.zIndex=10+it.layer;
+        floor.appendChild(d);
+      } else {
+        d.style.width=Math.max(60,Math.min(160,it.l*scale))+'px';
+        stage.appendChild(d);
+      }
+      d.addEventListener('pointerdown', e=>startDrag(e,ed,idx));
+    });
+    updateInfo();
+  }
+
+  function updateInfo(){
+    if(!info) return;
+    const placed=ed.items.filter(i=>i.placed);
+    const total=ed.items.length;
+    let P=0, mom=0;
+    for(const i of placed){ const w=edWeight(i); P+=w; mom+=w*(i.x+i.l/2); }
+    const veh=edVehicle();
+    let axStr='—';
+    if(P>1e-6){
+      const span=Math.max(1,veh.xAX-veh.xKP), cog=mom/P;
+      const rAx=P*(cog-veh.xKP)/span + veh.leerAX;
+      const rKp=(P - P*(cog-veh.xKP)/span) + veh.leerKP;
+      const okA=rAx<=veh.maxAX, okK=rKp<=veh.maxKP && (veh.minKP<=0||rKp>=veh.minKP);
+      axStr=`Sattellast <b class="${okK?'ok':'bad'}">${fmt(rKp)} kg</b> · Achslast <b class="${okA?'ok':'bad'}">${fmt(rAx)} kg</b> · Schwerpunkt <b>${fmt(cog/1000,2)} m</b>`;
+    }
+    const tooHigh=placed.some(i=> i.z+i.h>TRUCK.H+1);
+    info.innerHTML=`<span>Geladen <b>${placed.length} / ${total}</b></span>`+
+      `<span>Gewicht <b>${fmt(P)} kg</b>${P>MAX_WEIGHT?` <b class="bad">&gt; 24 t!</b>`:''}</span>`+
+      `<span>${axStr}</span>`+
+      (tooHigh?`<span class="bad">Höhe über 2,80 m!</span>`:'');
+    if(side){
+      const pseudo={boxes:placed.map(i=>({no:i.no,color:i.color,x:i.x,y:i.y,z:i.z,l:i.l,w:i.w,h:i.h,brd:i.brd||null})), underlays:[]};
+      for(const i of placed) pseudo.underlays.push({x:i.x,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN},{x:i.x+i.l-UNDERLAY_LEN,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN});
+      side.innerHTML=renderSide(pseudo);
+    }
+  }
+  ed.updateInfo=updateInfo;
+
+  // „Auto-Anordnung" stellt die komplette automatische Verteilung über ALLE
+  // LKW wieder her (verhindert Dubletten nach LKW-übergreifendem Verschieben).
+  if(resetBtn) resetBtn.addEventListener('click', ()=>{ resetAllEditors(); });
+  // Alle Pakete vom LKW entfernen -> wandern in die Ablage „Neben LKW"
+  if(clearBtn) clearBtn.addEventListener('click', ()=>{ ed.items.forEach(it=>{ it.placed=false; it.z=UNDERLAY_H; it.layer=0; }); draw(); });
+  draw();
+  return ed;
+}
+
+function startDrag(e, ed, idx){
+  e.preventDefault();
+  const el=e.currentTarget;
+  const r=el.getBoundingClientRect();
+  _drag={ ed, idx, el, dx:e.clientX-r.left, dy:e.clientY-r.top, moved:false };
+  el.setPointerCapture(e.pointerId);
+  el.classList.add('dragging');
+  el.style.position='fixed'; el.style.left=r.left+'px'; el.style.top=r.top+'px';
+  el.style.width=r.width+'px'; el.style.height=r.height+'px'; el.style.margin='0';
+  window.addEventListener('pointermove', onDrag);
+  window.addEventListener('pointerup', endDrag);
+}
+function onDrag(e){
+  if(!_drag) return; _drag.moved=true;
+  _drag.el.style.left=(e.clientX-_drag.dx)+'px';
+  _drag.el.style.top=(e.clientY-_drag.dy)+'px';
+}
+function endDrag(e){
+  if(!_drag) return;
+  window.removeEventListener('pointermove', onDrag);
+  window.removeEventListener('pointerup', endDrag);
+  const src=_drag.ed, it=src.items[_drag.idx];
+  const cx=e.clientX, cy=e.clientY;
+  // Ziel-LKW bestimmen: über welcher Ladefläche/Ablage liegt der Cursor?
+  // So lässt sich das gesamte Kontingent LKW-übergreifend verteilen –
+  // z. B. ein automatisch auf LKW 2 geladenes Paket per Hand auf LKW 1.
+  let tFloor=null, tStage=null;
+  for(const ed of _editors){
+    const fr=ed.floor.getBoundingClientRect();
+    if(cx>=fr.left&&cx<=fr.right&&cy>=fr.top&&cy<=fr.bottom){ tFloor=ed; break; }
+    const sr=ed.stage.getBoundingClientRect();
+    if(cx>=sr.left&&cx<=sr.right&&cy>=sr.top&&cy<=sr.bottom){ tStage=ed; }
+  }
+  const target=tFloor||tStage;
+  if(target){
+    if(target!==src){ src.items.splice(_drag.idx,1); target.items.push(it); }   // auf anderen LKW übernehmen
+    if(tFloor){
+      const fr=target.floor.getBoundingClientRect();
+      const M=60, W=target.floor.clientWidth, scale=W/(TRUCK.L+2*M);
+      let x=(cx-_drag.dx-fr.left)/scale - M;
+      let y=(cy-_drag.dy-fr.top)/scale - M;
+      x=Math.max(0, Math.min(TRUCK.L-it.l, x));
+      y=Math.max(0, Math.min(TRUCK.W-it.w, y));
+      it.x=x; it.y=y; it.placed=true; target.stackZ(it);
+    } else {
+      it.placed=false; it.z=UNDERLAY_H; it.layer=0;      // in die Ablage
+    }
+  } // sonst: unverändert (Drop außerhalb)
+  _drag=null;
+  src.draw(); if(target && target!==src) target.draw();
+}
+
+/* =========================================================================
+   Ergebnis rendern
+   ========================================================================= */
+function bar(pct,cls){ return `<div class="bar ${cls}"><i style="width:${Math.min(100,pct)}%"></i></div>`; }
+
+// Lastverteilungs-Diagramm (schematisch, Draufsicht der Längsachse)
+function renderAxleDiagram(ax){
+  const M=200, vbW=TRUCK.L+2*M, vbH=920, beamY=430;
+  const X=x=>M+Math.max(0,Math.min(TRUCK.L,x));
+  const winA=X(ax.cogMin), winB=X(Math.min(TRUCK.L,ax.cogMax));
+  const okCog = ax.cog>=ax.cogMin-1 && ax.cog<=ax.cogMax+1 && ax.okAxle && ax.okKing;
+  const cogColor = okCog ? '#2563eb' : '#dc2626';
+  let s=`<svg viewBox="0 0 ${vbW} ${vbH}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Lastverteilung">`;
+  // zulässiges Schwerpunktfenster
+  if(winB>winA) s+=`<rect x="${winA}" y="${beamY-120}" width="${winB-winA}" height="240" fill="#16a34a" fill-opacity="0.13"/>`+
+                   `<text x="${(winA+winB)/2}" y="${beamY-140}" text-anchor="middle" font-size="42" fill="#166534" font-weight="600">zulässiger Schwerpunktbereich</text>`;
+  // Ladefläche / Balken
+  s+=`<rect x="${X(0)}" y="${beamY-14}" width="${TRUCK.L}" height="28" rx="6" fill="#cbd5e1" stroke="#94a3b8" stroke-width="2"/>`;
+  s+=`<text x="${X(0)}" y="${beamY-30}" text-anchor="middle" font-size="40" fill="#64748b">Stirnwand</text>`;
+  // Königszapfen (Dreieck)
+  const kx=X(ax.xKP);
+  s+=`<polygon points="${kx-70},${beamY+150} ${kx+70},${beamY+150} ${kx},${beamY+20}" fill="#334155"/>`;
+  s+=`<text x="${kx}" y="${beamY+205}" text-anchor="middle" font-size="40" fill="#334155" font-weight="600">Königszapfen</text>`;
+  s+=`<text x="${kx}" y="${beamY+250}" text-anchor="middle" font-size="38" fill="#64748b">${fmt(ax.rKing)} kg</text>`;
+  // Achsaggregat (3 Räder)
+  const axx=X(ax.xAX);
+  for(let i=-1;i<=1;i++) s+=`<circle cx="${axx+i*220}" cy="${beamY+110}" r="86" fill="#1e293b"/>`;
+  s+=`<text x="${axx}" y="${beamY+235}" text-anchor="middle" font-size="40" fill="#334155" font-weight="600">Achsaggregat</text>`;
+  s+=`<text x="${axx}" y="${beamY+280}" text-anchor="middle" font-size="38" fill="#64748b">${fmt(ax.rAxle)} kg</text>`;
+  // Schwerpunkt
+  const cx=X(ax.cog);
+  s+=`<line x1="${cx}" y1="${beamY-190}" x2="${cx}" y2="${beamY+150}" stroke="${cogColor}" stroke-width="6" stroke-dasharray="18 12"/>`;
+  s+=`<circle cx="${cx}" cy="${beamY}" r="26" fill="${cogColor}"/>`;
+  s+=`<text x="${cx}" y="${beamY-210}" text-anchor="middle" font-size="46" fill="${cogColor}" font-weight="700">Schwerpunkt ${fmt(ax.cog/1000,2)} m</text>`;
+  s+=`</svg>`;
+  return s;
+}
+
+function renderAxle(ax){
+  const kPct=ax.rKing/ax.maxKing*100, aPct=ax.rAxle/ax.maxAxle*100;
+  const stat=ok=> ok? `<span class="ax-status ok">✓ i.O.</span>` : `<span class="ax-status bad">✗ überschritten</span>`;
+  const tare = (ax.leerKing>0 || ax.leerAxle>0);
+  let h=`<div class="ax-panel"><h3>⚖️ Lastverteilung / Achslasten</h3>`;
+  h+=`<p class="axsub">Verteilung nach Hebelgesetz${tare?' inkl. Eigengewicht (Tara)':' (nur Nutzlast, ohne Eigengewicht)'}. Beladung beginnt bündig an der vorderen Ladewand (kein Leerraum vorne); nur bei Überschreitung der Sattellast wird minimal nach hinten verschoben.</p>`;
+  h+=`<div class="ax-grid">`;
+  const minTxt = ax.minKing>0 ? ` · min. ${fmt(ax.minKing)} kg` : '';
+  const kSub = (tare ? `von ${fmt(ax.maxKing)} kg · Nutzlast ${fmt(ax.rKingPay)} + Tara ${fmt(ax.leerKing)} kg` : `von ${fmt(ax.maxKing)} kg`) + minTxt;
+  const aSub = tare ? `von ${fmt(ax.maxAxle)} kg · Nutzlast ${fmt(ax.rAxlePay)} + Tara ${fmt(ax.leerAxle)} kg` : `von ${fmt(ax.maxAxle)} kg`;
+  const kingBad = !ax.okKing || !ax.okMinKing || ax.kingNeg;
+  const kBar = ax.okMinKing ? (kPct>100?'err':kPct>90?'warn':'ok') : 'warn';
+  h+=`<div class="ax-cell"><div class="k">Sattellast (Königszapfen)</div><div class="v">${fmt(ax.rKing)} kg</div><div class="sub">${kSub}</div>${bar(kPct, kBar)}<div style="margin-top:6px">${ax.okMinKing?stat(!kingBad):`<span class="ax-status bad">✗ unter Mindestwert</span>`}</div></div>`;
+  h+=`<div class="ax-cell"><div class="k">Achslast (Achsaggregat)</div><div class="v">${fmt(ax.rAxle)} kg</div><div class="sub">${aSub}</div>${bar(aPct, aPct>100?'err':aPct>90?'warn':'ok')}<div style="margin-top:6px">${stat(ax.okAxle)}</div></div>`;
+  h+=`<div class="ax-cell"><div class="k">Lastschwerpunkt</div><div class="v">${fmt(ax.cog/1000,2)} m</div><div class="sub">ab Stirnwand · Nutzlast ${fmt(ax.P)} kg</div></div>`;
+  h+= ax.feasible
+    ? `<div class="ax-cell"><div class="k">Zulässiger Bereich</div><div class="v">${fmt(ax.cogMin/1000,2)}–${fmt(ax.cogMax/1000,2)} m</div><div class="sub">Schwerpunkt ab Stirnwand</div></div>`
+    : `<div class="ax-cell"><div class="k">Zulässiger Bereich</div><div class="v" style="color:var(--err)">—</div><div class="sub">Nutzlast zu hoch – Ladung reduzieren</div></div>`;
+  h+=`</div>`;
+  h+=`<div class="ax-diagram">${renderAxleDiagram(ax)}</div>`;
+  h+=`</div>`;
+  return h;
+}
+
+// Karte eines einzelnen LKW (Kennzahlen, Achslast, Ansichten, Editor)
+function truckCardHTML(res, idx, N){
+  const st=res.stats;
+  const wPct=st.totW/MAX_WEIGHT*100;
+  const vPct=st.totV/MAX_VOLUME*100;
+  let h='';
+  h+=`<div class="truck-card" data-truck="${idx}">`;
+  h+=`<div class="tc-head"><span class="truck-badge">🚛 LKW ${idx+1} / ${N}</span>
+      <div><div class="tc-title">Sattelzug ${idx+1}</div>
+      <div class="tc-sub">${res.boxes.length} Paket(e) · ${fmt(st.totW)} kg · ${fmt(st.totV,1)} m³</div></div></div>`;
+
+  // Kennzahlen je LKW
+  h+='<div class="stats">';
+  h+=`<div class="stat"><div class="k">Pakete auf LKW</div><div class="v">${res.boxes.length}</div><div class="sub">geladen</div></div>`;
+  if(st.weightLimit){
+    h+=`<div class="stat"><div class="k">Gewicht</div><div class="v">${fmt(st.totW)} kg</div><div class="sub">von 24.000 kg</div>${bar(wPct, wPct>99.5?'err':wPct>85?'warn':'ok')}</div>`;
+  } else {
+    const over=st.totW>MAX_WEIGHT;
+    h+=`<div class="stat${over?'':' muted'}"><div class="k">Gewicht</div><div class="v">${fmt(st.totW)} kg</div><div class="sub">Limit deaktiviert${over?' · &gt; 24 t!':''}</div>${bar(wPct, over?'err':'warn')}</div>`;
+  }
+  h+=`<div class="stat"><div class="k">Volumen (Raum)</div><div class="v">${fmt(st.totV,1)} m³</div><div class="sub">von 90 m³${st.totNet>0?` · Holz netto ${fmt(st.totNet,3)} m³`:''}</div>${bar(vPct, vPct>99.5?'err':vPct>85?'warn':'ok')}</div>`;
+  h+=`<div class="stat"><div class="k">Lademeter</div><div class="v">${fmt(st.ldm,2)} ldm</div><div class="sub">Länge genutzt: ${fmt(st.usedLen/1000,2)} m</div></div>`;
+  h+=`<div class="stat"><div class="k">Lagen (max.)</div><div class="v">${st.maxLayerUsed}</div><div class="sub">Ladefläche: ${fmt(st.floorArea/1e6,2)} m²</div></div>`;
+  h+='</div>';
+
+  // Warnungen dieses LKW (v. a. Achslast)
+  if(res.warnings.length){
+    h+='<div class="msgs">';
+    for(const w of res.warnings) h+=`<div class="msg warn">⚠️ ${esc(w)}</div>`;
+    h+='</div>';
+  }
+
+  // Achslasten dieses LKW
+  if(st.axle) h+=renderAxle(st.axle);
+
+  // Ansichten dieses LKW
+  h+=`<div class="view-title"><span>Seitenansicht <small>(Länge × Höhe, mit Rädern)</small></span></div>`;
+  h+=`<div class="svg-box">${renderSide(res)}</div>`;
+  h+=`<div class="view-title"><span>Draufsicht <small>(Länge × Breite – unterste Lage, ×N = Anzahl Lagen)</small></span></div>`;
+  h+=`<div class="svg-box">${renderTop(res)}</div>`;
+
+  h+=`<div class="view-title no-print"><span>3D-Simulation <small>(frei drehbar)</small></span></div>`;
+  h+=`<div class="c3d-wrap">
+      <canvas class="c3d"></canvas>
+      <div class="c3d-ctrl">
+        <button class="c3d-rot" type="button">⟳ Auto-Rotation</button>
+        <button class="c3d-reset" type="button">Ansicht zurücksetzen</button>
+      </div>
+      <div class="c3d-hint">Ziehen zum Drehen · Scrollen zum Zoomen</div>
+    </div>`;
+
+  h+=`<div class="view-title no-print"><span>✋ Manuelle Anordnung <small>(ziehen zum Verschieben; auf einen anderen LKW ziehen = umladen; in die Ablage ziehen zum Entfernen; auf ein Paket ziehen = stapeln; Länge bleibt fix)</small></span>
+      <span style="display:inline-flex;gap:8px">
+        <button class="btn btn-ghost no-print ed-clear" type="button">🗑 Alle entfernen</button>
+        <button class="btn btn-ghost no-print ed-reset" type="button">↺ Auto-Anordnung</button>
+      </span></div>
+    <div class="ed-wrap no-print">
+      <div class="ed-floor"><div class="truck-frame"></div></div>
+      <div class="ed-stage"><div class="ed-stage-label">Neben LKW ${idx+1} (nicht geladen)</div></div>
+      <div class="ed-info"></div>
+    </div>
+    <div class="view-title"><span>Seitenansicht (aktuelle Anordnung)</span></div>
+    <div class="svg-box ed-side"></div>`;
+
+  // Legende dieses LKW
+  h+='<div class="legend">';
+  const seen={};
+  for(const b of res.boxes){ if(!seen[b.no]) seen[b.no]=b; }
+  for(const no in seen){
+    const b=seen[no];
+    const ha = no.startsWith('HA·') ? ' <span class="ha-badge">Handelsware</span>' : '';
+    const lat = (b.brd && b.brd.lat) ? ` <span class="lat-badge">Latten: ${esc(b.brd.lat)}</span>` : '';
+    h+=`<div class="item"><span class="swatch" style="background:${b.color}"></span>
+      <b>${esc(no)}</b> <span class="dim">${b.l}×${b.w}×${b.h} mm</span>${lat}${ha}</div>`;
+  }
+  h+='</div>';
+  h+='</div>'; // .truck-card
+  return h;
+}
+
+function render(trucks){
+  const N=trucks.length;
+  const agg=aggregate(trucks);
+  const loadPct=agg.totReq? agg.totLoad/agg.totReq*100:0;
+
+  let html='';
+  const auftrag = (document.getElementById('auftrag').value||'').trim();
+  const dISO = document.getElementById('datum').value||'';
+  const dDE = dISO ? dISO.split('-').reverse().join('.') : '—';
+  html+=`<div class="res-head">
+    <div>
+      <div class="rh-title">Beladeplan – Sattelzug (Tautliner)</div>
+      <div class="rh-meta">Auftrag <b>${esc(auftrag||'—')}</b> · Datum <b>${esc(dDE)}</b> · ${agg.totLoad}/${agg.totReq} Pakete · ${fmt(agg.totW)} kg · <b>${N} LKW</b></div>
+    </div>
+    <button class="btn btn-ghost no-print" onclick="window.print()">🖨 Beladeplan drucken / PDF</button>
+  </div>`;
+
+  // Sammel-Meldung: Anzahl benötigter LKW
+  const anyBoxes = trucks.some(t=>t.boxes.length);
+  if(anyBoxes){
+    if(N===1){
+      html+=`<div class="msgs"><div class="msg ok">✓ Alle geladenen Pakete passen auf <b>einen</b> Sattelzug (${agg.totLoad}/${agg.totReq}).</div></div>`;
+    } else {
+      html+=`<div class="msgs"><div class="msg warn">ℹ️ Ein Sattelzug reicht nicht aus – die Ladung wurde automatisch auf <b>${N} LKW</b> verteilt (${agg.totLoad}/${agg.totReq} Pakete geladen).</div></div>`;
+    }
+  }
+
+  // Aggregierte Aufstellung nicht geladener Pakete (dauerhaft nicht verladbar)
+  const nlRows=[];
+  for(const no in agg.notLoaded){
+    const d=agg.notLoaded[no], info=agg.pkgInfo[no]||{};
+    const add=(cnt,cls,label,extra)=>{ if(cnt>0) nlRows.push({no,info,cnt,cls,label,extra:extra||''}); };
+    add(d.oversize,'oversize','Zu groß für den Laderaum',d.oversizeReason);
+    add(d.space,  'space', 'Kein Platz (auch nicht auf weiterem LKW)');
+    add(d.weight, 'weight','Maximalgewicht (24 t) erreicht');
+    add(d.volume, 'volume','Maximalvolumen (90 m³) erreicht');
+  }
+  if(nlRows.length){
+    const total=nlRows.reduce((a,r)=>a+r.cnt,0);
+    html+=`<div class="nl-panel"><h3>⚠️ Nicht geladene Pakete (${total})</h3>`;
+    html+=`<div class="tbl-scroll"><table class="nl-tbl"><thead><tr>`+
+          `<th>Paket</th><th>Maße (mm)</th><th style="text-align:right">Anzahl</th><th>Grund</th></tr></thead><tbody>`;
+    for(const r of nlRows){
+      const dim = r.info.l?`${r.info.l}×${r.info.w}×${r.info.h}`:'–';
+      html+=`<tr>`+
+        `<td><span class="swatch" style="background:${r.info.color||'#94a3b8'}"></span> <b>${esc(r.no)}</b></td>`+
+        `<td>${esc(dim)}</td>`+
+        `<td class="num">${r.cnt}</td>`+
+        `<td><span class="rtag ${r.cls}">${r.label}</span>${r.extra?` <span style="color:#a16207">${esc(r.extra)}</span>`:''}</td>`+
+        `</tr>`;
+    }
+    html+=`</tbody></table></div></div>`;
+  }
+
+  if(anyBoxes){
+    if(N>1) html+=`<div class="view-title"><span>Alle ${N} LKW nebeneinander <small>(quer scrollen)</small></span></div>`;
+    html+='<div class="trucks-row">';
+    trucks.forEach((res,i)=>{ if(res.boxes.length) html+=truckCardHTML(res, i, N); });
+    html+='</div>';
+  } else {
+    html+=`<div class="empty">Keine Pakete konnten geladen werden. Bitte Maße prüfen.</div>`;
+  }
+
+  document.getElementById('results').innerHTML=html;
+
+  // Interaktive Teile je LKW-Karte aufbauen
+  teardown3D();
+  _editors=[];                       // Editor-Registry für LKW-übergreifendes Ziehen zurücksetzen
+  const cards=document.querySelectorAll('#results .truck-card');
+  cards.forEach(card=>{
+    const res=trucks[+card.dataset.truck];
+    const cv=card.querySelector('.c3d');
+    if(cv) setup3D(res, cv);
+    makeEditor(card, res);
+  });
+}
+
+/* =========================================================================
+   Berechnen-Button
+   ========================================================================= */
+document.getElementById('calc').addEventListener('click',()=>{
+  const {list,errors}=readPackages();
+  if(!list.length){
+    document.getElementById('results').innerHTML=
+      `<div class="msgs"><div class="msg err">Bitte mindestens ein vollständiges Paket eingeben.</div></div>`;
+    return;
+  }
+  const weightLimit=document.getElementById('weightLimit').checked;
+  const numOr=(id,def)=>{ const v=+document.getElementById(id).value; return isFinite(v)&&v>0?v:def; };
+  const num0=id=>{ const v=+document.getElementById(id).value; return isFinite(v)&&v>0?v:0; };
+  const axle={
+    kingpin:    numOr('axKP',1600),
+    axle:       numOr('axAX',9300),
+    maxKingpin: numOr('axMaxKP',12000),
+    maxAxle:    numOr('axMaxAX',24000),
+    leerKingpin: num0('axLeerKP'),
+    leerAxle:    num0('axLeerAX'),
+    minKingpin:  num0('axMinKP'),
+  };
+  const trucks=optimizeMulti(list,{weightLimit, axle});
+  if(errors.length && trucks[0]) trucks[0].warnings.unshift(...errors);
+  render(trucks);
+  document.getElementById('resultPanel').scrollIntoView({behavior:'smooth',block:'start'});
+});
+
+/* =========================================================================
+   PDF-Import (best effort)
+   Erkennt Zeilen mit L × B × H und optionaler Stückzahl.
+   ========================================================================= */
+if(window.pdfjsLib){
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+/* -------------------------------------------------------------------------
+   Einheitliche Parselogik – EGAL welches PDF hochgeladen wird, werden die
+   Zeilen immer nach demselben Sägewerks-/AV-Listen-Schema interpretiert:
+
+     Brett  B × H        (z. B. 30x160, 78x78, 28x65)  → Querschnitt eines Bretts.
+                          Stehen zwei Maße in der Zeile (BM roh + B×H fertig),
+                          gilt das fertige Endmaß (das gelieferte Brettmaß).
+     Länge  n,nnn        (Meter mit Komma, z. B. 4,500) → L in mm
+     Stück  <ganzzahl>   Gesamtstückzahl dieser Länge
+     Anzahl breit  hoch  (z. B. 7  23) → Bretter je Paket = breit × hoch
+     Latten <Code>       Latten-Code laut Excel (S18, S12, OL, 2LA-12,
+                          10LA-12, PAPP …). Intervall n = jede n-te Lage,
+                          Stärke h mm (siehe LATTEN-Tabelle).
+
+   Daraus je Zeile ein oder mehrere Pakete:
+     Pakete (n)  = Stück / (breit × hoch)          (0-Stück-Zeilen entfallen)
+     Paketlänge  = L
+     Paketbreite = breit × Brett-H
+     Pakethöhe   = hoch × Brett-B + floor(hoch/n) × Lattenstärke
+     m³ netto    = (Stück/Anzahl) × Brett-B × Brett-H × L / 1e9   (je Paket)
+   ------------------------------------------------------------------------- */
+function parseSawmillLines(lines){
+  const found=[]; let lastBH=null;
+  for(const raw of lines){
+    const line=(raw||'').replace(/\s+/g,' ').trim();
+    if(!line) continue;
+    // Brett-Querschnitt (mind. 2-stellig -> schließt Notizen wie "25x6mm" aus).
+    // Stehen zwei Maßpaare in der Zeile (BM roh + B×H fertig), gilt das LETZTE
+    // (fertiges Endmaß B×H = geliefertes Brettmaß), sonst das einzige.
+    const pairs=[...line.matchAll(/(\d{2,4})\s*[x×]\s*(\d{2,4})/g)];
+    if(pairs.length){ const p=pairs[pairs.length-1]; lastBH={B:+p[1], H:+p[2]}; }
+    // Länge (m mit Komma) unmittelbar gefolgt von der Gesamt-Stückzahl,
+    // die NICHT Teil einer Brett-Angabe (…x…) sein darf.
+    const lm=line.match(/\b(\d{1,2})[.,](\d{3})\s+(\d{1,5})\b(?!\s*[x×])/);
+    // Bretter breit hoch, angeankert am EA-Wert (Dezimal, z. B. 1,0 · 3,0 · 0,8)
+    const bm=line.match(/\b\d{1,2}[.,]\d\b\s+(\d{1,3})\s+(\d{1,3})\b/);
+    // Latten-Code aus der „Latten"-Spalte: S12/S18, OL, PAPP, n LA-h, S18-2LA …
+    const latm=line.match(/\b(\d{1,2}LA-?S?\d{1,2}|S\d{1,2}-\d{1,2}LA|S\d{1,2}|\d{1,2}LA|OL|PAPP)\b/i);
+    const artm=line.match(/\b(HW|SW|HA)\b/);                        // Warenart: HW/SW/HA
+    if(lm && bm && lastBH){
+      const L=(+lm[1])*1000+(+lm[2]);
+      const stueck=+lm[3];
+      const across=+bm[1], high=+bm[2];
+      const per=across*high;
+      const anzahl=Math.round(stueck/per);
+      if(stueck>0 && per>0 && anzahl>=1){
+        const B=lastBH.B, H=lastBH.H;
+        // Latten: Code nachschlagen -> Intervall n (jede n-te Lage) + Stärke h.
+        const spec=lattenSpec(latm?latm[1]:'S18');
+        const height=lattenHeight(high, B, spec);
+        // m³ netto je Paket aus der tatsächlichen Bretterzahl je Paket
+        // (Stück/Anzahl) – bei vollen Bündeln = breit×hoch, bei Teilbündeln
+        // (z. B. Handelsware HA mit 5 Brettern in einem 3×2-Raster) entsprechend weniger.
+        const perPkg=stueck/anzahl;
+        const m3=perPkg*B*H*L/1e9;
+        // Warenart: HA (Handelsware) wird am Paketnamen als solche markiert
+        // und ersetzt „Schnittholz/Seitenware" durch die Kategorie „Handelsware".
+        const art=artm?artm[1]:'';
+        const isHA=art==='HA';
+        const no=(isHA?'HA·':'')+`${B}x${H}x${L}`;
+        // Brett-/Latten-Aufbau je Paket für die Visualisierung merken:
+        //   ac = Bretter quer (Breite), hi = Brettlagen (Höhe),
+        //   bb/bh = Brett-Querschnitt, st = Lattenstärke, every = Latten-Intervall
+        found.push({ no, l:L, w:across*H, h:height,
+                     m3:+m3.toFixed(3), n:anzahl, cat:isHA?'ha':'hg', art, lat:spec.code,
+                     brd:{ac:across, hi:high, bb:B, bh:H, st:spec.h, every:spec.n, lat:spec.code} });
+      }
+    }
+  }
+  return found;
+}
+
+// Generischer Fallback: freies L × B × H (+ optionale Stückzahl)
+function parseGenericLines(lines){
+  const found=[];
+  for(const line of lines){
+    const local=/(\d{2,5})\s*[x×\*]\s*(\d{2,5})\s*[x×\*]\s*(\d{2,5})/g; let m;
+    while((m=local.exec(line))){
+      let n=1; const rest=line.replace(m[0],' ');
+      const mN=rest.match(/(\d{1,4})\s*(?:stk|stück|st\.|pakete?|pcs?)\b/i)||rest.match(/\b(?:anz\.?|menge)\s*[:]?\s*(\d{1,4})/i);
+      if(mN) n=+mN[1];
+      found.push({no:`P${found.length+1}`, l:+m[1], w:+m[2], h:+m[3], n, cat:'hg'});
+    }
+  }
+  return found;
+}
+
+// Kopfdaten (Auftrags-/AV-Nr., Datum) aus dem gesamten Text übernehmen
+function applyPdfHeader(full){
+  const mAV=full.match(/AV[\s\-]*Liste[\s\-]*(?:Nr\.?)?\s*[:#]?\s*([0-9]{2,4}-[0-9]+)/i);
+  const mA = mAV || full.match(/Auftrag[s\-\.]*(?:nummer|nr\.?)?\s*[:#]?\s*([A-Za-z0-9\-\/]+)/i);
+  if(mA) document.getElementById('auftrag').value=mA[1];
+  const mD=full.match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})/);
+  if(mD){
+    let [_,d,mo,yr]=mD; if(yr.length===2) yr='20'+yr;
+    const iso=`${yr.padStart(4,'0')}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
+    if(!isNaN(Date.parse(iso))) document.getElementById('datum').value=iso;
+  }
+}
+
+// pdf.js-Textinhalt einer Seite -> Zeilen (nach Y-Position gruppiert)
+function itemsToLines(items){
+  const byLine={};
+  for(const it of items){
+    const y=Math.round(it.transform[5]);
+    (byLine[y]=byLine[y]||[]).push(it.str);
+  }
+  return Object.keys(byLine).sort((a,b)=>b-a).map(y=>byLine[y].join(' '));
+}
+
+// OCR (Tesseract.js) für gescannte PDFs ohne Textebene: Seiten rendern,
+// Text erkennen und in dieselbe Parselogik geben.
+async function ocrPdfToLines(pdf, status){
+  if(!window.Tesseract) throw new Error('OCR-Bibliothek (Tesseract.js) nicht geladen.');
+  const lines=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    status.textContent=`Gescanntes PDF – Texterkennung (OCR) Seite ${p}/${pdf.numPages} …`;
+    const page=await pdf.getPage(p);
+    const viewport=page.getViewport({scale:2.5});   // höhere Auflösung = bessere OCR
+    const canvas=document.createElement('canvas');
+    canvas.width=viewport.width; canvas.height=viewport.height;
+    await page.render({canvasContext:canvas.getContext('2d'), viewport}).promise;
+    const {data}=await Tesseract.recognize(canvas,'deu');
+    (data.text||'').split(/\r?\n/).forEach(l=>{ if(l.trim()) lines.push(l); });
+  }
+  return lines;
+}
+
+document.getElementById('pdfInput').addEventListener('change', async (e)=>{
+  const file=e.target.files[0];
+  if(!file) return;
+  const status=document.getElementById('pdfStatus');
+  if(!window.pdfjsLib){ status.textContent='PDF-Bibliothek nicht geladen (Internetverbindung?).'; return; }
+  status.textContent='PDF wird gelesen …';
+  try{
+    const buf=await file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+    let lines=[];
+    for(let p=1;p<=pdf.numPages;p++){
+      const page=await pdf.getPage(p);
+      const tc=await page.getTextContent();
+      lines.push(...itemsToLines(tc.items));
+    }
+
+    // Textebene zu dünn (gescanntes PDF)? -> OCR auf dieselbe Logik anwenden.
+    const textChars=lines.join('').replace(/\s/g,'').length;
+    let ocrUsed=false;
+    if(textChars<20){
+      if(window.Tesseract){
+        lines=await ocrPdfToLines(pdf, status);
+        ocrUsed=true;
+      }else{
+        status.textContent='PDF ist ein Scan ohne Textebene und OCR ist nicht geladen (Internetverbindung?).';
+        return;
+      }
+    }
+
+    const full=lines.join('\n');
+    applyPdfHeader(full);
+
+    // Immer dieselbe Parselogik – unabhängig von Text-PDF oder OCR:
+    let found=parseSawmillLines(lines);
+    if(!found.length) found=parseGenericLines(lines);
+
+    if(found.length){
+      rowsEl.innerHTML=''; rowSeq=0;
+      found.forEach(f=> addRow(f));
+      recolor(); saveLocal();
+      const via=ocrUsed?' (per OCR erkannt)':'';
+      const pk=found.reduce((s,f)=>s+(f.n||1),0);
+      status.textContent=`${found.length} Position(en) / ${pk} Paket(e) aus PDF übernommen${via} – bitte Kategorie prüfen.`;
+    }else{
+      status.textContent='Keine Positionen im PDF erkannt – bitte manuell erfassen.';
+    }
+  }catch(err){
+    console.error(err);
+    status.textContent='PDF konnte nicht gelesen werden: '+err.message;
+  }finally{
+    e.target.value='';
+  }
+});
+</script>
+</body>
+</html>
