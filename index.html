@@ -343,6 +343,7 @@ const CATEGORIES = {
   sg: { label:'Seitenware getrocknet',  factor:460, ref:52 },
   hf: { label:'Schnittholz frisch',     factor:570, ref:42 },
   hg: { label:'Schnittholz getrocknet', factor:460, ref:52 },
+  ha: { label:'Handelsware',            factor:460, ref:52 },
 };
 
 const PALETTE = ['#2563eb','#dc2626','#16a34a','#d97706','#7c3aed','#0891b2',
@@ -1818,14 +1819,16 @@ function parseSawmillLines(lines){
         // (z. B. Handelsware HA mit 5 Brettern in einem 3×2-Raster) entsprechend weniger.
         const perPkg=stueck/anzahl;
         const m3=perPkg*B*H*L/1e9;
-        // Warenart: HA (Handelsware) wird am Paketnamen als solche markiert.
+        // Warenart: HA (Handelsware) wird am Paketnamen als solche markiert
+        // und ersetzt „Schnittholz/Seitenware" durch die Kategorie „Handelsware".
         const art=artm?artm[1]:'';
-        const no=(art==='HA'?'HA·':'')+`${B}x${H}x${L}`;
+        const isHA=art==='HA';
+        const no=(isHA?'HA·':'')+`${B}x${H}x${L}`;
         // Brett-/Latten-Aufbau je Paket für die Visualisierung merken:
         //   ac = Bretter quer (Breite), hi = Brettlagen (Höhe),
         //   bb/bh = Brett-Querschnitt, st = Zwischenlattenhöhe
         found.push({ no, l:L, w:across*H, h:high*B+(high-1)*sticker,
-                     m3:+m3.toFixed(3), n:anzahl, cat:'hg', art,
+                     m3:+m3.toFixed(3), n:anzahl, cat:isHA?'ha':'hg', art,
                      brd:{ac:across, hi:high, bb:B, bh:H, st:sticker} });
       }
     }

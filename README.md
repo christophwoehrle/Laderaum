@@ -31,6 +31,7 @@ Gewicht = Volumen × Faktor (kg/m³)
 | Seitenware getrocknet | 460 | 52 m³ ≙ 24 t |
 | Schnittholz frisch | 570 | 42 m³ ≙ 24 t |
 | Schnittholz getrocknet | 460 | 52 m³ ≙ 24 t |
+| Handelsware | 460 | 52 m³ ≙ 24 t |
 
 ## Beladungsregeln
 
@@ -80,7 +81,9 @@ Gewicht = Volumen × Faktor (kg/m³)
     weniger. Die Warenart (HW Hobelware, SW Sägeware, HA Handelsware) wird
     beim Packen gleich behandelt; die Kategorie/Gewichtsfaktor bitte prüfen.
     **Handelsware (HA)** wird als solche markiert: die Paketnummer bekommt
-    das Präfix „HA·" und in der Legende erscheint ein Badge „Handelsware".
+    das Präfix „HA·", in der Legende erscheint ein Badge „Handelsware" und
+    als **Kategorie/Bezeichnung** wird „Handelsware" gesetzt (ersetzt
+    Schnittholz/Seitenware), sobald HA auf dem Formular steht.
 
   Die AV-Listen-Nr. wird als Auftragsnummer übernommen. Ist ein PDF ein
   **Scan ohne Textebene**, wird automatisch **OCR (Tesseract.js)** angewandt
