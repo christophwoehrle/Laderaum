@@ -74,7 +74,11 @@ Gewicht = Volumen × Faktor (kg/m³)
   - **Anzahl Pakete** = Stück ÷ (breit × hoch) – 0-Stück-Zeilen entfallen,
   - **Länge** = L, **Breite** = breit × Brett-H,
   - **Höhe** = hoch × Brett-B + (hoch-1) × Latte,
-  - **m³ netto** = (breit × hoch) × Brett-B × Brett-H × L (je Paket).
+  - **m³ netto** = (Stück ÷ Anzahl) × Brett-B × Brett-H × L (je Paket) –
+    bei vollen Bündeln entspricht das breit × hoch, bei Teilbündeln (z. B.
+    Handelsware **HA** mit 5 Brettern in einem 3×2-Raster) entsprechend
+    weniger. Die Warenart (HW Hobelware, SW Sägeware, HA Handelsware) wird
+    gleich behandelt; die Kategorie/Gewichtsfaktor bitte prüfen.
 
   Die AV-Listen-Nr. wird als Auftragsnummer übernommen. Ist ein PDF ein
   **Scan ohne Textebene**, wird automatisch **OCR (Tesseract.js)** angewandt

@@ -1795,7 +1795,8 @@ function parseSawmillLines(lines){
     // Länge (m mit Komma) unmittelbar gefolgt von der Gesamt-Stückzahl,
     // die NICHT Teil einer Brett-Angabe (…x…) sein darf.
     const lm=line.match(/\b(\d{1,2})[.,](\d{3})\s+(\d{1,5})\b(?!\s*[x×])/);
-    const bm=line.match(/\b\d{1,2}[.,]0\b\s+(\d{1,3})\s+(\d{1,3})\b/);   // Bretter breit hoch (nach EA n,0)
+    // Bretter breit hoch, angeankert am EA-Wert (Dezimal, z. B. 1,0 · 3,0 · 0,8)
+    const bm=line.match(/\b\d{1,2}[.,]\d\b\s+(\d{1,3})\s+(\d{1,3})\b/);
     const stk=line.match(/\bS(\d{1,2})\b/i);                        // Zwischenlatte S<nn>
     const noSlat=/\bOL\b/.test(line);                              // OL = ohne Latten
     if(lm && bm && lastBH){
@@ -1808,7 +1809,11 @@ function parseSawmillLines(lines){
         const B=lastBH.B, H=lastBH.H;
         // Lattenhöhe: S<nn> -> nn mm, OL (ohne Latten) -> 0, sonst 18 mm Vorgabe
         const sticker=stk?+stk[1]:(noSlat?0:UNDERLAY_STICKER);
-        const m3=per*B*H*L/1e9;
+        // m³ netto je Paket aus der tatsächlichen Bretterzahl je Paket
+        // (Stück/Anzahl) – bei vollen Bündeln = breit×hoch, bei Teilbündeln
+        // (z. B. Handelsware HA mit 5 Brettern in einem 3×2-Raster) entsprechend weniger.
+        const perPkg=stueck/anzahl;
+        const m3=perPkg*B*H*L/1e9;
         // Brett-/Latten-Aufbau je Paket für die Visualisierung merken:
         //   ac = Bretter quer (Breite), hi = Brettlagen (Höhe),
         //   bb/bh = Brett-Querschnitt, st = Zwischenlattenhöhe
