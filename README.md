@@ -128,7 +128,8 @@ Gewicht = Volumen × Faktor (kg/m³)
   und von dort wieder platzieren; ein Paket auf ein anderes ziehen stapelt es.
   Die Länge bleibt immer fixiert (kein Drehen). Live-Anzeige von geladenen
   Paketen, Gewicht, Sattel-/Achslast und Schwerpunkt sowie eine mitlaufende
-  Seitenansicht; „↺ Auto-Anordnung" stellt die automatische Beladung wieder
+  Seitenansicht **und 3D-Ansicht** (beide werden bei jeder manuellen Änderung
+  aktualisiert); „↺ Auto-Anordnung" stellt die automatische Beladung wieder
   her, „🗑 Alle entfernen" räumt den LKW leer (alle Pakete wandern in die
   Ablage), um von Hand neu zu beladen.
 - **LKW-übergreifend umladen**: Werden mehrere LKW benötigt, steht das

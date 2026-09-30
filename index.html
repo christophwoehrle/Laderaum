@@ -1334,19 +1334,22 @@ function setup3D(res, cv){
 
   // --- Szene aufbauen (zentriert um Laderaum-Mitte) ---
   const CX=TRUCK.L/2, CY=TRUCK.W/2, CZ=TRUCK.H/2;
-  const faces=[];   // {pts:[[x,y,z]..], fill}
+  let faces=[];   // {pts:[[x,y,z]..], fill}
   const addBox=(x,y,z,l,w,h,color)=>{ for(const f of boxFaces(x,y,z,l,w,h,color)) faces.push(f); };
-
-  // Räder (dunkel, unter dem Boden)
   const wheelXs=[900, TRUCK.L-3200, TRUCK.L-2100, TRUCK.L-1000];
-  for(const wx of wheelXs){
-    addBox(wx-350, -60,        -820, 700, 260, 620, '#1e293b');
-    addBox(wx-350, TRUCK.W-200, -820, 700, 260, 620, '#1e293b');
+
+  // Szene aus Paketen + Unterlagshölzern neu aufbauen (für Live-Update bei
+  // manueller Anordnung); Kamera/Zoom bleiben erhalten.
+  function buildScene(boxes, underlays){
+    faces=[];
+    for(const wx of wheelXs){                       // Räder (statisch)
+      addBox(wx-350, -60,        -820, 700, 260, 620, '#1e293b');
+      addBox(wx-350, TRUCK.W-200, -820, 700, 260, 620, '#1e293b');
+    }
+    for(const u of (underlays||[])) addBox(u.x, 0, u.z, u.len, TRUCK.W, UNDERLAY_H, '#78350f');
+    for(const b of (boxes||[]))     addBox(b.x, b.y, b.z, b.l, b.w, b.h, b.color);
   }
-  // Unterlagshölzer
-  for(const u of res.underlays) addBox(u.x, 0, u.z, u.len, TRUCK.W, UNDERLAY_H, '#78350f');
-  // Pakete
-  for(const b of res.boxes) addBox(b.x, b.y, b.z, b.l, b.w, b.h, b.color);
+  buildScene(res.boxes, res.underlays);
 
   // Bodenfläche (leicht transparent) als eigene Fläche
   const floor={ pts:[[0,0,0],[TRUCK.L,0,0],[TRUCK.L,TRUCK.W,0],[0,TRUCK.W,0]], fill:'rgba(148,163,184,0.20)' };
@@ -1470,8 +1473,11 @@ function setup3D(res, cv){
   if(resetBtn) resetBtn.addEventListener('click', ()=>{ autoOff(); st.yaw=DEF.yaw; st.pitch=DEF.pitch; st.zoom=DEF.zoom; draw(); });
 
   inst.resize=resize;
+  // Live-Aktualisierung der 3D-Szene aus der manuellen Anordnung
+  inst.rebuild=(boxes, underlays)=>{ buildScene(boxes, underlays); draw(); };
   window.addEventListener('resize', resize);
   resize();
+  return inst;
 }
 
 /* =========================================================================
@@ -1569,11 +1575,11 @@ function makeEditor(card, res){
       `<span>Gewicht <b>${fmt(P)} kg</b>${P>MAX_WEIGHT?` <b class="bad">&gt; 24 t!</b>`:''}</span>`+
       `<span>${axStr}</span>`+
       (tooHigh?`<span class="bad">Höhe über 2,80 m!</span>`:'');
-    if(side){
-      const pseudo={boxes:placed.map(i=>({no:i.no,color:i.color,x:i.x,y:i.y,z:i.z,l:i.l,w:i.w,h:i.h,brd:i.brd||null})), underlays:[]};
-      for(const i of placed) pseudo.underlays.push({x:i.x,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN},{x:i.x+i.l-UNDERLAY_LEN,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN});
-      side.innerHTML=renderSide(pseudo);
-    }
+    const pseudo={boxes:placed.map(i=>({no:i.no,color:i.color,x:i.x,y:i.y,z:i.z,l:i.l,w:i.w,h:i.h,brd:i.brd||null})), underlays:[]};
+    for(const i of placed) pseudo.underlays.push({x:i.x,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN},{x:i.x+i.l-UNDERLAY_LEN,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN});
+    if(side) side.innerHTML=renderSide(pseudo);
+    // 3D-Ansicht dieses LKW live mit der manuellen Anordnung aktualisieren
+    if(card._c3d) card._c3d.rebuild(pseudo.boxes, pseudo.underlays);
   }
   ed.updateInfo=updateInfo;
 
@@ -1862,7 +1868,7 @@ function render(trucks){
   cards.forEach(card=>{
     const res=trucks[+card.dataset.truck];
     const cv=card.querySelector('.c3d');
-    if(cv) setup3D(res, cv);
+    card._c3d = cv ? setup3D(res, cv) : null;   // 3D-Instanz an der Karte merken (Live-Update)
     makeEditor(card, res);
   });
 }
