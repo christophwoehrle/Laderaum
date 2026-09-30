@@ -807,11 +807,15 @@ function expandColumnPlan(cp){
 // mitheben, solange die Reihe insgesamt ≤ 2,80 m bleibt.
 function _laneHeight(lane){ let h=0; for(const L of lane.layers) h+=UNDERLAY_H+L.maxH; return h; }
 function planLayeredLanes(units){
-  if(!units.length) return {placements:[], notPlacedU:[], shelves:[]};
-  const maxFW=Math.max(...units.map(u=>u.footW));
+  return planLayeredLanesOrdered(units.slice().sort((a,b)=> b.footL-a.footL || b.h-a.h));
+}
+// wie planLayeredLanes, aber die Einlagerungs-Reihenfolge wird vorgegeben
+// (für Multi-Start: verschiedene Sortierungen + Zufalls-Restarts, beste gewinnt).
+function planLayeredLanesOrdered(rem){
+  if(!rem.length) return {placements:[], notPlacedU:[], shelves:[]};
+  const maxFW=Math.max(...rem.map(u=>u.footW));
   const N=Math.max(1, Math.floor((TRUCK.W+0.01)/maxFW));
   const lanes=[]; for(let i=0;i<N;i++) lanes.push({y:i*maxFW, layers:[]});
-  const rem=units.slice().sort((a,b)=> b.footL-a.footL || b.h-a.h);
   const notPlacedU=[];
   for(const u of rem){
     let best=null;
@@ -907,8 +911,23 @@ function packFloor(units){
   for(const former of [sameNumberColumns, mixedWidthColumns])
     for(const packer of [planMixedLanes, planWidthGroups, planBalancedLanes])
       cands.push(expandColumnPlan(packer(former(units))));
-  cands.push(planLayeredLanes(units));
   cands.push(planFullFloorLanes(units));
+  // Lagen-Packer als Multi-Start: verschiedene Sortierungen + reproduzierbare
+  // Zufalls-Restarts. Bei gemischten Höhen (hohe + flache Pakete) findet ein
+  // einzelnes gieriges „längstes zuerst" oft nicht das Optimum – mehrere
+  // Startreihenfolgen holen deutlich mehr Pakete auf den LKW.
+  const sorts=[
+    u=>u.slice().sort((a,b)=> b.footL-a.footL || b.h-a.h),   // längstes zuerst
+    u=>u.slice().sort((a,b)=> b.h-a.h || b.footL-a.footL),   // höchstes zuerst
+    u=>u.slice().sort((a,b)=> a.h-b.h || b.footL-a.footL),   // flachstes zuerst
+    u=>u.slice().sort((a,b)=> b.h*b.footL-a.h*a.footL),      // größte Fläche zuerst
+  ];
+  for(const srt of sorts) cands.push(planLayeredLanesOrdered(srt(units)));
+  let seed=0x9e3779b9 ^ units.length;
+  const rnd=()=>{ seed=(Math.imul(seed,1103515245)+12345)&0x7fffffff; return seed/0x7fffffff; };
+  const shuf=a=>{ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; };
+  const R=Math.min(4000, Math.max(60, Math.round(30000/Math.max(1,units.length))));
+  for(let s=0;s<R;s++) cands.push(planLayeredLanesOrdered(shuf(units)));
   const baseLen=p=> p.placements.filter(pl=>(pl.layer||0)===0).reduce((s,pl)=>s+(pl.u.footL||0),0);
   let best=null, bestN=-1, bestB=-1;
   for(const p of cands){
@@ -1784,7 +1803,17 @@ function render(trucks){
     if(N===1){
       html+=`<div class="msgs"><div class="msg ok">✓ Alle geladenen Pakete passen auf <b>einen</b> Sattelzug (${agg.totLoad}/${agg.totReq}).</div></div>`;
     } else {
-      html+=`<div class="msgs"><div class="msg warn">ℹ️ Ein Sattelzug reicht nicht aus – die Ladung wurde automatisch auf <b>${N} LKW</b> verteilt (${agg.totLoad}/${agg.totReq} Pakete geladen).</div></div>`;
+      // Grund für den zusätzlichen LKW ableiten: Gewicht, Volumen oder Geometrie.
+      const wLimit = trucks[0].stats.weightLimit;
+      let grund;
+      if(wLimit && agg.totW > MAX_WEIGHT+1e-6){
+        grund = `Das Gesamtgewicht <b>${fmt(agg.totW)} kg</b> übersteigt die zulässigen 24 t je LKW.`;
+      } else if(agg.totV > MAX_VOLUME+1e-6){
+        grund = `Das Gesamtvolumen <b>${fmt(agg.totV,1)} m³</b> übersteigt die 90 m³ je LKW.`;
+      } else {
+        grund = `Nicht wegen Gewicht oder Volumen (nur <b>${fmt(agg.totW)} kg</b> / <b>${fmt(agg.totV,1)} m³</b> gesamt, beide unter den Grenzen), sondern <b>geometrisch</b>: die Pakete passen nach Maßen und Stapelhöhe (max. 2,80 m, je Lage 72 mm Unterlage) nicht alle auf einen LKW – meist begrenzen wenige besonders hohe Pakete die Lagenzahl ihrer Reihe.`;
+      }
+      html+=`<div class="msgs"><div class="msg warn">ℹ️ Ein Sattelzug reicht nicht aus – die Ladung wurde automatisch auf <b>${N} LKW</b> verteilt (${agg.totLoad}/${agg.totReq} Pakete). Grund: ${grund}</div></div>`;
     }
   }
 

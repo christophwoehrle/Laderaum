@@ -179,7 +179,13 @@ Gewicht = Volumen × Faktor (kg/m³)
    Reihen à 13,50 m); die längsten Reihen kommen nach unten, kürzere darüber
    (volle Auflage). So wird der LKW von unten nach oben maximal beladen.
    Bei Gleichstand der Paketanzahl gewinnt die Variante mit der **am besten
-   (länger) gefüllten Bodenlage**.
+   (länger) gefüllten Bodenlage**. Der lagenweise Packer läuft zusätzlich als
+   **Multi-Start** (mehrere Startreihenfolgen: längstes/höchstes/flachstes/
+   größte-Fläche zuerst + reproduzierbare Zufalls-Restarts). Bei **gemischten
+   Höhen** (hohe und flache Pakete) findet ein einzelnes „längstes zuerst"
+   oft nicht das Optimum – die Restarts holen deutlich mehr Pakete auf den LKW.
+   Reicht ein LKW nicht, nennt die Anzeige den **Grund** (Gewicht, Volumen
+   oder – wenn beide unter der Grenze liegen – die Geometrie/Stapelhöhe).
 4. Emission Lage für Lage von unten nach oben unter Beachtung von
    Gewicht (24 t) und Volumen (90 m³).
 5. Beladung immer bündig an der vorderen Ladewand (Stirnwand) beginnen –
