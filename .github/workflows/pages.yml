@@ -1,0 +1,49 @@
+name: Deploy to GitHub Pages
+
+# Veröffentlicht die eigenständige index.html als GitHub-Pages-Seite.
+# Läuft aus dem Feature-Branch (damit die Seite schon vor dem Merge zum
+# Testen erreichbar ist) und aus main (nach dem Merge). Die Zeile mit dem
+# Feature-Branch kann nach dem Merge entfernt werden.
+
+on:
+  push:
+    branches:
+      - main
+      - claude/truck-load-optimizer-uivh90
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Nur ein Deployment gleichzeitig; laufende werden nicht abgebrochen.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        # enablement: true aktiviert GitHub Pages beim ersten Lauf automatisch
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload site
+        # Das gesamte Repo-Root (enthält index.html) wird ausgeliefert.
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
