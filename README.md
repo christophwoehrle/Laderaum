@@ -11,15 +11,24 @@ Einhaltung aller Rahmenbedingungen – mit Seitenansicht und Draufsicht.
 Für den PDF-Import wird eine Internetverbindung benötigt
 (pdf.js für Text-PDFs, Tesseract.js für die OCR gescannter PDFs – beide über CDN).
 
-## Rahmendaten des LKW
+## LKW / Auflieger (Innenmaße)
 
-| Größe | Wert |
-|-------|------|
-| Länge | 13,50 m |
-| Breite | 2,48 m |
-| Höhe | 2,80 m |
-| Max. Volumen | 90 m³ |
-| Max. Gewicht | 24 t |
+Der zu beladende Auflieger ist **auswählbar**; die Frachtberechnung (Packung,
+Volumen, Höhenbegrenzung) richtet sich nach dem **Innenraum** des gewählten
+Fahrzeugs. Hinterlegt sind vier gängige Bauarten (Herstellerangaben):
+
+| ID | Fahrzeug | Innen L × B × H (mm) | Hinweis |
+|----|----------|----------------------|---------|
+| F06 | Fliegl RoadRunner (Standard-Plane) | 13650 × 2480 × 2740 | vorn 2740 / hinten 2790 mm |
+| F09 | Fliegl MegaRunner (Mega, 3.000 vorn) | 13650 × 2480 × 3000 | Gesamthöhe/Fahrhöhe prüfen |
+| F13 | DINKEL DSAPP 32000 (Hubdach) | 13620 × 2480 × 3000 | Hubdach nur zur Beladung |
+| F14 | Schwarzmüller Rungen-Plateau (offen) | 13500 × 2480 × 2800 | offenes Plateau, Maße bestätigen |
+
+Als **Innenhöhe** wird konservativ die niedrigste veröffentlichte Höhe
+angesetzt; das **Max. Volumen** ergibt sich aus L × B × H des Innenraums.
+Max. Gewicht 24 t (Achslasten separat einstellbar). Die Fahrzeughöhe wirkt
+direkt auf die Beladung – z. B. passt ein Auftrag, der auf der 2,74-m-Plane
+zwei LKW braucht, auf einer 3,00-m-Mega-/Hubdach-Plane oft auf einen LKW.
 
 ## Kategorien & Gewichtsfaktoren
 

@@ -244,6 +244,11 @@
         <label for="datum">Datum</label>
         <input id="datum" type="date">
       </div>
+      <div>
+        <label for="truckSel">LKW / Auflieger (Innenmaße)</label>
+        <select id="truckSel"></select>
+        <div class="hint" id="truckDims" style="margin-top:5px"></div>
+      </div>
     </div>
   </section>
 
@@ -304,7 +309,7 @@
     <details class="hlp">
       <summary>Regeln &amp; Rahmendaten</summary>
       <ul>
-        <li>Innenraum: 13,50 m × 2,48 m × 2,80 m · Max. Volumen 90 m³ · Max. Gewicht 24 t</li>
+        <li>Innenraum laut gewähltem LKW/Auflieger (Auswahl oben) · Max. Gewicht 24 t</li>
         <li>Alle Maßangaben in mm. Länge bleibt immer parallel zur Fahrtrichtung – kein Drehen, nur längs/quer verschieben.</li>
         <li>10 mm Abstand in alle Richtungen zwischen den Paketen.</li>
         <li>Unterlagshölzer (Höhe 72 mm, 2 Stück) unter jedem Paket – auch beim Stapeln.</li>
@@ -331,9 +336,34 @@
 /* =========================================================================
    Konstanten (alle Längen in mm, Gewicht in kg, Volumen in m³)
    ========================================================================= */
-const TRUCK = { L:13500, W:2480, H:2800 };
-const MAX_VOLUME = 90;        // m³
+const TRUCK = { L:13650, W:2480, H:2740 };
+let MAX_VOLUME = 90;          // m³ (wird aus dem gewählten Innenraum abgeleitet)
 const MAX_WEIGHT = 24000;     // kg
+
+/* Auswählbare LKW/Auflieger mit Innenmaßen (Quelle: Hersteller-Datenblätter,
+   siehe Excel „Schnittholz_LKW_Innenabmessungen"). H = nutzbare Innenhöhe
+   (konservativ die niedrigste veröffentlichte Innenhöhe), hmax nur als Info.
+   Die Frachtberechnung (Packung, Volumen) richtet sich nach dem gewählten
+   Innenraum. */
+const TRUCKS = {
+  F06: { name:'Fliegl RoadRunner – Standard-Plane',          L:13650, W:2480, H:2740, hmax:2790,
+         note:'Innenhöhe vorn 2.740 / hinten 2.790 mm; Seitenöffnung 2.630/2.680 mm.' },
+  F09: { name:'Fliegl MegaRunner – Mega-Plane (3.000 vorn)',  L:13650, W:2480, H:3000, hmax:3000,
+         note:'Innenhöhe 3.000 mm. Gesamthöhe (lt. Tabelle 4.040 mm) und Fahrhöhe prüfen.' },
+  F13: { name:'DINKEL DSAPP 32000 – Plane mit Hubdach',       L:13620, W:2480, H:3000, hmax:3000,
+         note:'Innenhöhe 3.000 mm, Hubdach nur zur Beladung. Fahrhöhe separat bestätigen.' },
+  F14: { name:'Schwarzmüller 3-Achs-Rungen – offenes Plateau',L:13500, W:2480, H:2800, hmax:2800,
+         note:'Offenes Plateau ohne Innenbox: freie Breite zwischen den Rungen und zulässige Stapelhöhe (2.800 mm ist nicht pauschal straßenzulässig) beim Disponenten bestätigen.' },
+};
+let TRUCK_ID='F06';
+// Gewählten LKW übernehmen: Innenmaße + Volumengrenze setzen.
+function applyTruck(id){
+  const t = TRUCKS[id] || TRUCKS.F06; TRUCK_ID = TRUCKS[id] ? id : 'F06';
+  TRUCK.L=t.L; TRUCK.W=t.W; TRUCK.H=t.H;
+  MAX_VOLUME = +(t.L*t.W*t.H/1e9).toFixed(1);   // Innenraum-Volumen als Grenze
+  return t;
+}
+applyTruck(TRUCK_ID);
 const GAP        = 10;        // mm Abstand ringsum
 const UNDERLAY_H = 72;        // mm Höhe Unterlagsholz
 const UNDERLAY_LEN = 120;     // mm dargestellte Breite eines Unterlagsholzes (in Fahrtrichtung)
@@ -488,10 +518,25 @@ document.getElementById('clearRows').addEventListener('click',()=>{
   el.min = iso; el.value = iso;
 })();
 
+/* ---- LKW-/Auflieger-Auswahl ------------------------------------------- */
+function truckDimsText(id){
+  const t=TRUCKS[id]||TRUCKS.F06;
+  const htxt = t.H===t.hmax ? `${(t.H/1000).toFixed(2)} m` : `${(t.H/1000).toFixed(2)}–${(t.hmax/1000).toFixed(2)} m`;
+  return `Innen: ${(t.L/1000).toFixed(2)} × ${(t.W/1000).toFixed(2)} × ${htxt} · Volumen ${(t.L*t.W*t.H/1e9).toFixed(1)} m³ · ${t.note}`;
+}
+(function initTruckSelect(){
+  const sel=document.getElementById('truckSel'); if(!sel) return;
+  sel.innerHTML=Object.entries(TRUCKS).map(([id,t])=>`<option value="${id}">${esc(t.name)}</option>`).join('');
+  sel.value=TRUCK_ID;
+  const refresh=()=>{ applyTruck(sel.value); document.getElementById('truckDims').innerHTML=truckDimsText(sel.value); };
+  sel.addEventListener('change', ()=>{ refresh(); saveLocal(); });
+  refresh();
+})();
+
 /* =========================================================================
    Auftrag speichern / laden (localStorage + Datei-Export/Import)
    ========================================================================= */
-const LS_KEY='laderaum_auftrag_v5';   // v5: Latten-Codes + neue Lattenhöhen-Logik
+const LS_KEY='laderaum_auftrag_v6';   // v6: LKW-Auswahl (Innenmaße)
 let _restoring=false, _saveT=0;
 const val = id => document.getElementById(id).value;
 
@@ -499,6 +544,7 @@ function collectState(){
   return {
     v:1, ts:Date.now(),
     auftrag: val('auftrag'), datum: val('datum'),
+    truck: (document.getElementById('truckSel')||{}).value || TRUCK_ID,
     weightLimit: document.getElementById('weightLimit').checked,
     axle:{ kp:val('axKP'), ax:val('axAX'), maxKP:val('axMaxKP'), maxAX:val('axMaxAX'), leerKP:val('axLeerKP'), leerAX:val('axLeerAX') },
     rows:[...rowsEl.children].map(tr=>({
@@ -517,6 +563,11 @@ function applyState(s){
   try{
     if(s.auftrag!=null) document.getElementById('auftrag').value=s.auftrag;
     if(s.datum) document.getElementById('datum').value=s.datum;
+    if(s.truck && TRUCKS[s.truck]){
+      const sel=document.getElementById('truckSel'); if(sel) sel.value=s.truck;
+      applyTruck(s.truck);
+      const dims=document.getElementById('truckDims'); if(dims) dims.innerHTML=truckDimsText(s.truck);
+    }
     if(typeof s.weightLimit==='boolean') document.getElementById('weightLimit').checked=s.weightLimit;
     const ax=s.axle||{}, setIf=(id,v)=>{ if(v!=null && v!=='') document.getElementById(id).value=v; };
     setIf('axKP',ax.kp); setIf('axAX',ax.ax); setIf('axMaxKP',ax.maxKP);
@@ -1103,7 +1154,7 @@ function optimize(pkgs, opts={}){
   for(const k in loaded) totLoad+=loaded[k];
 
   if(budgetHit==='weight') warnings.push(`Maximales Gewicht von 24 t erreicht – nicht alle Pakete konnten geladen werden.`);
-  if(budgetHit==='volume') warnings.push(`Maximales Volumen von 90 m³ erreicht – nicht alle Pakete konnten geladen werden.`);
+  if(budgetHit==='volume') warnings.push(`Maximales Volumen von ${fmt(MAX_VOLUME,1)} m³ (Innenraum) erreicht – nicht alle Pakete konnten geladen werden.`);
   if(!weightLimit && totW > MAX_WEIGHT+1e-6)
     warnings.push(`Gewichtslimit deaktiviert: Beladung wiegt ${fmt(totW)} kg und überschreitet die 24 t – bitte gesondert prüfen (z. B. Achslasten).`);
 
@@ -1242,7 +1293,7 @@ function renderSide(res){
   }
   // Maßangaben
   s+=`<text x="${X(TRUCK.L/2)}" y="${M-30}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600">← ${fmt(TRUCK.L/1000,2)} m →</text>`;
-  s+=`<text x="${X(0)-42}" y="${M+TRUCK.H/2}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600" transform="rotate(-90 ${X(0)-42} ${M+TRUCK.H/2})">2,80 m</text>`;
+  s+=`<text x="${X(0)-42}" y="${M+TRUCK.H/2}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600" transform="rotate(-90 ${X(0)-42} ${M+TRUCK.H/2})">${fmt(TRUCK.H/1000,2)} m</text>`;
   s+=`</svg>`;
   return s;
 }
@@ -1286,7 +1337,7 @@ function renderTop(res){
     }
   }
   s+=`<text x="${X(TRUCK.L/2)}" y="${M-30}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600">← ${fmt(TRUCK.L/1000,2)} m →</text>`;
-  s+=`<text x="${X(0)-42}" y="${Y(TRUCK.W/2)}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600" transform="rotate(-90 ${X(0)-42} ${Y(TRUCK.W/2)})">2,48 m</text>`;
+  s+=`<text x="${X(0)-42}" y="${Y(TRUCK.W/2)}" text-anchor="middle" font-size="46" fill="#475569" font-weight="600" transform="rotate(-90 ${X(0)-42} ${Y(TRUCK.W/2)})">${fmt(TRUCK.W/1000,2)} m</text>`;
   s+=`</svg>`;
   return s;
 }
@@ -1574,7 +1625,7 @@ function makeEditor(card, res){
     info.innerHTML=`<span>Geladen <b>${placed.length} / ${total}</b></span>`+
       `<span>Gewicht <b>${fmt(P)} kg</b>${P>MAX_WEIGHT?` <b class="bad">&gt; 24 t!</b>`:''}</span>`+
       `<span>${axStr}</span>`+
-      (tooHigh?`<span class="bad">Höhe über 2,80 m!</span>`:'');
+      (tooHigh?`<span class="bad">Höhe über ${fmt(TRUCK.H/1000,2)} m!</span>`:'');
     const pseudo={boxes:placed.map(i=>({no:i.no,color:i.color,x:i.x,y:i.y,z:i.z,l:i.l,w:i.w,h:i.h,brd:i.brd||null})), underlays:[]};
     for(const i of placed) pseudo.underlays.push({x:i.x,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN},{x:i.x+i.l-UNDERLAY_LEN,y:i.y,z:i.z-UNDERLAY_H,len:UNDERLAY_LEN});
     if(side) side.innerHTML=renderSide(pseudo);
@@ -1726,7 +1777,7 @@ function truckCardHTML(res, idx, N){
     const over=st.totW>MAX_WEIGHT;
     h+=`<div class="stat${over?'':' muted'}"><div class="k">Gewicht</div><div class="v">${fmt(st.totW)} kg</div><div class="sub">Limit deaktiviert${over?' · &gt; 24 t!':''}</div>${bar(wPct, over?'err':'warn')}</div>`;
   }
-  h+=`<div class="stat"><div class="k">Volumen (Raum)</div><div class="v">${fmt(st.totV,1)} m³</div><div class="sub">von 90 m³${st.totNet>0?` · Holz netto ${fmt(st.totNet,3)} m³`:''}</div>${bar(vPct, vPct>99.5?'err':vPct>85?'warn':'ok')}</div>`;
+  h+=`<div class="stat"><div class="k">Volumen (Raum)</div><div class="v">${fmt(st.totV,1)} m³</div><div class="sub">von ${fmt(MAX_VOLUME,1)} m³${st.totNet>0?` · Holz netto ${fmt(st.totNet,3)} m³`:''}</div>${bar(vPct, vPct>99.5?'err':vPct>85?'warn':'ok')}</div>`;
   h+=`<div class="stat"><div class="k">Lademeter</div><div class="v">${fmt(st.ldm,2)} ldm</div><div class="sub">Länge genutzt: ${fmt(st.usedLen/1000,2)} m</div></div>`;
   h+=`<div class="stat"><div class="k">Lagen (max.)</div><div class="v">${st.maxLayerUsed}</div><div class="sub">Ladefläche: ${fmt(st.floorArea/1e6,2)} m²</div></div>`;
   h+='</div>';
@@ -1799,6 +1850,7 @@ function render(trucks){
     <div>
       <div class="rh-title">Beladeplan – Sattelzug (Tautliner)</div>
       <div class="rh-meta">Auftrag <b>${esc(auftrag||'—')}</b> · Datum <b>${esc(dDE)}</b> · ${agg.totLoad}/${agg.totReq} Pakete · ${fmt(agg.totW)} kg · <b>${N} LKW</b></div>
+      <div class="rh-meta">Fahrzeug <b>${esc((TRUCKS[TRUCK_ID]||{}).name||'')}</b> · Innenraum ${fmt(TRUCK.L/1000,2)} × ${fmt(TRUCK.W/1000,2)} × ${fmt(TRUCK.H/1000,2)} m</div>
     </div>
     <button class="btn btn-ghost no-print" onclick="window.print()">🖨 Beladeplan drucken / PDF</button>
   </div>`;
@@ -1817,7 +1869,7 @@ function render(trucks){
       } else if(agg.totV > MAX_VOLUME+1e-6){
         grund = `Das Gesamtvolumen <b>${fmt(agg.totV,1)} m³</b> übersteigt die 90 m³ je LKW.`;
       } else {
-        grund = `Nicht wegen Gewicht oder Volumen (nur <b>${fmt(agg.totW)} kg</b> / <b>${fmt(agg.totV,1)} m³</b> gesamt, beide unter den Grenzen), sondern <b>geometrisch</b>: die Pakete passen nach Maßen und Stapelhöhe (max. 2,80 m, je Lage 72 mm Unterlage) nicht alle auf einen LKW – meist begrenzen wenige besonders hohe Pakete die Lagenzahl ihrer Reihe.`;
+        grund = `Nicht wegen Gewicht oder Volumen (nur <b>${fmt(agg.totW)} kg</b> / <b>${fmt(agg.totV,1)} m³</b> gesamt, beide unter den Grenzen), sondern <b>geometrisch</b>: die Pakete passen nach Maßen und Stapelhöhe (max. ${fmt(TRUCK.H/1000,2)} m, je Lage 72 mm Unterlage) nicht alle auf einen LKW – meist begrenzen wenige besonders hohe Pakete die Lagenzahl ihrer Reihe.`;
       }
       html+=`<div class="msgs"><div class="msg warn">ℹ️ Ein Sattelzug reicht nicht aus – die Ladung wurde automatisch auf <b>${N} LKW</b> verteilt (${agg.totLoad}/${agg.totReq} Pakete). Grund: ${grund}</div></div>`;
     }
@@ -1877,6 +1929,7 @@ function render(trucks){
    Berechnen-Button
    ========================================================================= */
 document.getElementById('calc').addEventListener('click',()=>{
+  const tsel=document.getElementById('truckSel'); if(tsel) applyTruck(tsel.value);   // gewählten Innenraum übernehmen
   const {list,errors}=readPackages();
   if(!list.length){
     document.getElementById('results').innerHTML=
